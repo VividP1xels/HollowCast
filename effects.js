@@ -510,9 +510,9 @@ const HCFX = (() => {
           const h = e.hist(Math.floor(y / H * p.depth)); if (!h) continue;
           d.set(h.subarray(y * W * 4, (y + 1) * W * 4), y * W * 4);
         }
-        if (p.vert) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        if (p.vert) for (let x = 0; x < W; x++) {
           const h = e.hist(Math.floor(x / W * p.depth)); if (!h) continue;
-          const i = (y * W + x) * 4; d[i] = h[i]; d[i + 1] = h[i + 1]; d[i + 2] = h[i + 2];
+          for (let y = 0; y < H; y++) { const i = (y * W + x) * 4; d[i] = h[i]; d[i + 1] = h[i + 1]; d[i + 2] = h[i + 2]; }
         }
         c.putImageData(img, 0, 0);
       } },

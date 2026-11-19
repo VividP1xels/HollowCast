@@ -145,7 +145,7 @@ function demoScenes() {
     makeScene({
       name: 'Hallway', src: 'black', dur: 13, trans: 'glitch',
       script: SCRIPT_EXAMPLES['Hallway background'],
-      chars: [HCChar.create('smiler', { z: 9, speed: 0.55 })],
+      chars: [HCChar.create('smiler', { z: 7, speed: 0.55 })],
       fxStack: [{ id: 'heart-12', amt: 70, on: true }, { id: 'scratch-6', amt: 100, on: true }],
       params: makeParams('Night shift', { osd: 'REC', camText: 'CAM 02', subRate: 6, zoom: 0 }),
     }),

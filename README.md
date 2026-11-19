@@ -36,6 +36,22 @@ Windows may warn that the app is from an unknown publisher, because it isn't cod
 
 **Looks:** Found tape, Rotted tape, Emergency broadcast, Surveillance, Night shift, Clean. You can copy a scene's look to every scene.
 
+## Effect library: 1,104 effects
+
+**46 effect families × 24 tuned variants**, in eight categories: Distort, Glitch, Color, Stylize, Film, Weather, Horror and Time. Each variant has its own seeded settings, so *Drowned Kaleidoscope* and *Feral Kaleidoscope* really are different. Search the library, click an effect to stack it on the current scene, set each layer's amount, reorder or switch layers off, or use **🎲 Random effect** and **Chaos ×3**.
+
+Families include: kaleidoscope, tile repeat, ripple, melt, heat haze, fisheye, vortex, polar void, tunnel, splitting seam, earthquake, block shuffle, torn fields, flip flicker, static patches, corrupt text, pixel sort, channel rot, negative ghost, hue drift, duotone, gradient map, solarize, strobe, edge glow, carved, 1-bit dither, halftone, terminal ASCII, film burn, light leak, scratched print, black rain, ashfall, fog bank, bleeding frame, heartbeat, redacted, flashlight, zoom echo, spin echo, slit scan, stutter, motion reveal, time split and afterimage.
+
+## Character creator: monsters, people, creatures
+
+Add procedural 3D characters to any scene and shape them with sliders: height, build, hunch, number of arms and legs (0–10), limb length, head size and stretch, neck, eyes (0–16, any color, optional glow), mouth and teeth, horns, skin color, pose (stand, crawl, spider) and animation (idle, sway, walk, approach, twitch, stare, head spin, float, reach). Characters can flicker in and out and fade into the dark.
+
+Starting types: Human, Tall man, Faceless, Smiler, Monster, Crawler, Spider, Child, Puppet, Wendigo and Many-armed. **🎲 Random monster** invents a new one each time. Put several characters in one scene.
+
+## Inspiration
+
+The **Inspiration** button opens a guide to well-known analog horror (Local 58, Gemini Home Entertainment, The Mandela Catalogue, The Walten Files, Kane Parsons' Backrooms, Marble Hornets, Petscop and more), with what each does well and a link to find it, plus a search box for the whole genre.
+
 ## Scripting, generative art and 3D
 
 Every scene has a JavaScript layer that runs each frame, before the tape damage is applied. Pick an example from **Script / VFX / 3D** to start:
@@ -64,6 +80,8 @@ Script API:
 | `cube() sphere() torus() pyramid() plane() figure() box() merge()` | 3D meshes |
 | `model('file.obj')` | an imported 3D model (drop a `.obj` into the media bin) |
 | `render3d(mesh, {x,y,z, rx,ry,rz, scale, color, wire, stroke, light, fog, cam, fov})` | flat-shaded 3D |
+| `character({type, z, eyes, arms, anim, …})` | any character from the creator |
+| `effect('Drowned Kaleidoscope', 80)` | any library effect by name |
 | `glitch() flash() burst(level, secs) every(seconds)` | events |
 | `set('effectName', value)` | override any slider for this frame |
 | `after(c => …)` | draw on top of the finished, damaged frame |

@@ -5,7 +5,7 @@
 
 const HCChar = (() => {
   const BASE = {
-    name: 'Character', type: 'human', anim: 'idle', speed: 1, x: 0, z: 4, y: 0, face: 0, scale: 1, flicker: 0,
+    name: 'Character', type: 'human', anim: 'idle', speed: 1, x: 0, z: 3, y: 0, face: 0, scale: 1, flicker: 0,
     height: 1.75, build: 1, headSize: 1, headStretch: 1, neck: 0.3, hunch: 0, arms: 2, armLen: 1, legs: 2, legLen: 1,
     eyes: 2, eyeSize: 1, eyeColor: '#111111', glow: false, mouth: 0, teeth: false, horns: 0, hornLen: 0.4,
     skin: '#c9a68a', fog: 0.15, pose: 'stand',
@@ -228,7 +228,7 @@ const HCChar = (() => {
   }
 
   // ---------- render into the frame ----------
-  const CAM = 4, FOV = 1.2;
+  const CAM = 0, FOV = 1.2;
   function render(ctx, s, t) {
     if (s.flicker > 0 && HCNoise(t * 3, s.x * 7 + s.z) < s.flicker / 130) return;
     const W = ctx.canvas.width, H = ctx.canvas.height, size = H / 2;
