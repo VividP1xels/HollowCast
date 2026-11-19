@@ -11,6 +11,19 @@ It runs as a Windows `.exe` or in any modern browser. Everything happens on your
 
 Windows may warn that the app is from an unknown publisher, because it isn't code-signed. Click **More info → Run anyway**.
 
+## What's new in 1.2
+
+- **Main menu** at launch that you can fully customize: title, subtitle, tagline, font (including your own imported fonts), size, layout, colors, background (live preview of your film, TV static, color bars or your own image), static, scanlines, vignette, VCR clock, ambient hum, and the name and visibility of every button.
+- **Templates** from the menu: Found footage tape, Emergency broadcast, Surveillance / game ARG, Creature feature, Educational tape, and **🎲 Random film**, which writes a whole new short every time.
+- **Tabs:** Edit · VFX · Characters · 3D · Images · Audio / SFX · ARG Tools · Media · Inspiration. Press keys **1–9** to switch.
+- **Import almost anything:** video, images and GIFs, audio (MP3, WAV, OGG, M4A, FLAC…), 3D models (**OBJ, STL, GLB, glTF, PLY**), fonts (**TTF, OTF, WOFF**), text files and projects. Other files are kept in the media bin too.
+- **3D tab:** place imported or built-in models in any scene. Move, rotate, auto-spin, bob, color, wireframe, flicker, and set when each one appears and disappears.
+- **Images tab:** image layers you can **drag around on the preview**, with scale, rotation, mirror, opacity, 11 blend modes, flicker, in front of or behind characters, timing, and animations (drift, pulse, shake, peek, spin, creep zoom, fade in, jump scare).
+- **Audio / SFX tab:** a **sound effect generator** with 27 horror sounds (static, TV power down, VHS rewind, radio tuning, number station, dread drone, whispers, heartbeat, synthetic scream, footsteps, door creak, distorted bell, jump-scare stinger, tension riser and more). Every click makes a new variation, with pitch and length controls. Place sounds at any time in a scene with volume, speed, reverse, loop, fades and **voice FX** (radio, telephone, tape, underwater, cave, distort, bitcrush, demon, chipmunk, ghost). **Record your own voice** with the microphone.
+- **ARG Tools tab:** encode clues (ROT13, Atbash, A1Z26, binary, hex, Base64, Morse, backwards) and send them straight into the crawl, title card or subliminal flashes. Turn text into **Morse beeps** or a **hidden spectrogram message**, which sounds like noise but shows readable text in a spectrogram viewer.
+- **VFX tab:** **save any effect stack as your own effect** and reuse it in every project.
+- **Media tab:** everything you've imported, with one-click actions for each file.
+
 ## What it does
 
 **Editing**

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HOLLOWCAST</title>
-<meta name="description" content="An analog horror editor: scene timeline, VHS damage, VFX, 3D, generative scripting, game capture and tape audio, exported to video.">
+<meta name="description" content="An analog horror editor: scenes, VHS damage, 1,104 VFX, characters, 3D models, images, sound effects, ARG tools and game capture.">
 <link rel="stylesheet" href="fonts/vt323.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -24,15 +24,42 @@
   </form>
 </div>
 
+<div id="menu" class="menu" hidden>
+  <canvas id="mBg"></canvas>
+  <div class="m-content">
+    <div id="mClock" class="m-clock"></div>
+    <h1 id="mTitle" class="m-title"></h1>
+    <div id="mSub" class="m-sub"></div>
+    <nav id="mButtons" class="m-buttons"></nav>
+    <div id="mTemplates" class="m-templates" hidden></div>
+    <div id="mTag" class="m-tag"></div>
+  </div>
+  <div id="mVersion" class="m-version"></div>
+  <aside id="mCustom" class="m-custom" hidden>
+    <div class="row2"><strong class="sect">CUSTOMIZE MENU</strong><span style="flex:1"></span><button id="mReset" class="ghost-sm">Reset</button><button id="mCustomClose">Done</button></div>
+    <div id="mForm"></div>
+  </aside>
+</div>
+
 <header>
   <h1>HOLLOWCAST</h1>
-  <span class="sub">analog horror editor</span>
+  <button id="menuBtn" class="ghost-sm" title="Main menu">☰ Menu</button>
+  <nav class="tabs" id="tabs">
+    <button data-tab="edit" class="active">Edit</button>
+    <button data-tab="vfx">VFX</button>
+    <button data-tab="chars">Characters</button>
+    <button data-tab="models">3D</button>
+    <button data-tab="images">Images</button>
+    <button data-tab="audio">Audio / SFX</button>
+    <button data-tab="arg">ARG Tools</button>
+    <button data-tab="media">Media</button>
+    <button data-tab="inspo">Inspiration</button>
+  </nav>
   <span id="status" class="status"></span>
   <nav class="file">
     <button id="newBtn">New</button>
     <label class="btn">Open<input type="file" id="openFile" accept=".json,application/json" hidden></label>
-    <button id="saveBtn">Save project</button>
-    <button id="inspoBtn" class="primary">Inspiration</button>
+    <button id="saveBtn">Save</button>
     <span id="who" class="who"></span>
     <button id="signOut" class="ghost-sm">Sign out</button>
   </nav>
@@ -42,7 +69,7 @@
   <section class="stage">
     <div class="screen" id="drop">
       <canvas id="view" width="640" height="480"></canvas>
-      <div class="drophint">DROP VIDEO, IMAGES OR .OBJ MODELS</div>
+      <div class="drophint">DROP ANYTHING: VIDEO, IMAGES, AUDIO, 3D MODELS, FONTS, PROJECTS</div>
     </div>
 
     <div class="transport">
@@ -65,9 +92,9 @@
     </div>
 
     <div class="bar media">
-      <span class="lbl">MEDIA</span>
+      <span class="lbl">SOURCE</span>
       <div id="bin" class="bin"></div>
-      <label class="btn">+ Add files<input type="file" id="file" accept="video/*,image/*,.obj" multiple hidden></label>
+      <label class="btn">+ Import<input type="file" id="file" multiple hidden></label>
     </div>
 
     <div class="bar actions">
@@ -79,45 +106,86 @@
       <button id="flashBtn" title="F">Subliminal</button>
     </div>
 
-    <p class="hint"><b>Space</b> play · <b>←/→</b> scenes · <b>B</b> split · <b>Ctrl+Z</b> undo · <b>Ctrl+D</b> duplicate · <b>G</b> glitch · <b>F</b> flash · <b>R</b> record · <b>S</b> snapshot. Everything runs on your computer and nothing is uploaded.</p>
+    <p class="hint"><b>Space</b> play · <b>←/→</b> scenes · <b>B</b> split · <b>Ctrl+Z</b> undo · <b>Ctrl+D</b> duplicate · <b>G</b> glitch · <b>F</b> flash · <b>R</b> record · <b>S</b> snapshot · <b>1–9</b> tabs</p>
   </section>
 
   <aside>
-    <section class="inspector">
-      <div class="ins-title">SCENE <span id="insIdx"></span></div>
-      <label class="row text"><span>Name</span><input id="sName" type="text"></label>
-      <label class="row select"><span>Source</span><select id="sSrc"></select></label>
-      <label class="row text" id="rowDur"><span>Duration (s)</span><input id="sDur" type="number" min="0.5" step="0.5"></label>
-      <div class="row trim" id="rowTrim">
-        <span>Trim (s)</span>
-        <div class="trimbox">
-          <input id="sIn" type="number" step="0.1" min="0" aria-label="In point"> →
-          <input id="sOut" type="number" step="0.1" min="0" aria-label="Out point">
-          <button id="setIn" title="Set in point at playhead">[</button>
-          <button id="setOut" title="Set out point at playhead">]</button>
+    <!-- EDIT -->
+    <section class="tab" data-tab="edit">
+      <section class="inspector">
+        <div class="ins-title">SCENE <span id="insIdx"></span></div>
+        <label class="row text"><span>Name</span><input id="sName" type="text"></label>
+        <label class="row select"><span>Source</span><select id="sSrc"></select></label>
+        <label class="row text" id="rowDur"><span>Duration (s)</span><input id="sDur" type="number" min="0.5" step="0.5"></label>
+        <div class="row trim" id="rowTrim">
+          <span>Trim (s)</span>
+          <div class="trimbox">
+            <input id="sIn" type="number" step="0.1" min="0" aria-label="In point"> →
+            <input id="sOut" type="number" step="0.1" min="0" aria-label="Out point">
+            <button id="setIn" title="Set in point at playhead">[</button>
+            <button id="setOut" title="Set out point at playhead">]</button>
+          </div>
         </div>
+        <label class="row select"><span>Transition in</span>
+          <select id="sTrans">
+            <option value="cut">Cut</option>
+            <option value="fade">Fade from black</option>
+            <option value="static">Static burst</option>
+            <option value="roll">Vertical roll</option>
+            <option value="glitch">Hard glitch</option>
+          </select>
+        </label>
+        <label class="row check"><span>Fade out at end</span><input id="sFadeOut" type="checkbox"></label>
+      </section>
+      <div class="sect">LOOK <span class="dim">(this scene)</span></div>
+      <div class="presets" id="presets"></div>
+      <div class="row2">
+        <button id="lookAllBtn" class="ghost-sm">Copy look to all scenes</button>
+        <button id="resetSceneBtn" class="ghost-sm">Reset scene look</button>
       </div>
-      <label class="row select"><span>Transition in</span>
-        <select id="sTrans">
-          <option value="cut">Cut</option>
-          <option value="fade">Fade from black</option>
-          <option value="static">Static burst</option>
-          <option value="roll">Vertical roll</option>
-          <option value="glitch">Hard glitch</option>
-        </select>
-      </label>
-      <label class="row check"><span>Fade out at end</span><input id="sFadeOut" type="checkbox"></label>
+      <div id="controls"></div>
     </section>
 
-    <div class="sect">LOOK <span class="dim">(this scene)</span></div>
-    <div class="presets" id="presets"></div>
-    <div class="row2">
-      <button id="lookAllBtn" class="ghost-sm">Copy look to all scenes</button>
-      <button id="resetSceneBtn" class="ghost-sm">Reset scene look</button>
-    </div>
+    <!-- VFX -->
+    <section class="tab" data-tab="vfx" hidden>
+      <div class="sect">EFFECT STACK <span class="dim">(this scene, top to bottom)</span></div>
+      <p id="fxStackEmpty" class="dim small">None yet. Click any effect below to stack it.</p>
+      <div id="fxStack"></div>
+      <div class="row2">
+        <button id="fxRandom">🎲 Random</button>
+        <button id="fxChaos">Chaos ×3</button>
+        <button id="fxClear" class="ghost-sm">Clear</button>
+      </div>
+      <div class="row2">
+        <input id="myFxName" type="text" placeholder="Name this stack…" aria-label="Custom effect name">
+        <button id="saveMyFx" title="Save the current stack as your own effect">★ Save as my effect</button>
+      </div>
+      <div id="myFxList" class="bin"></div>
 
-    <details class="group" open>
-      <summary>CHARACTERS <span class="dim">(monsters, people, creatures)</span></summary>
+      <div class="sect">LIBRARY <span class="dim">(<span id="fxCount"></span> effects)</span></div>
+      <div class="row2">
+        <input id="fxSearch" type="text" placeholder="Search: kaleidoscope, blood, drowned…" aria-label="Search effects">
+        <select id="fxCat" aria-label="Category"><option value="">All</option></select>
+      </div>
+      <div id="fxList" class="fx-list"></div>
+      <p id="fxHits" class="dim small"></p>
+
+      <details class="group">
+        <summary>SCRIPT <span class="dim">(code your own VFX, 3D and generative art)</span></summary>
+        <div class="row2">
+          <select id="examples" aria-label="Script examples"><option value="">Examples…</option></select>
+          <button id="insertExample">Load</button>
+          <label class="chk"><input type="checkbox" id="scriptOn" checked> On</label>
+        </div>
+        <textarea id="code" class="code" spellcheck="false" rows="12" placeholder="// JavaScript that runs every frame. Pick an example to start."></textarea>
+        <pre id="scriptErr" class="err" hidden></pre>
+        <details class="api"><summary>Script reference</summary><pre id="scriptHelp"></pre></details>
+      </details>
+    </section>
+
+    <!-- CHARACTERS -->
+    <section class="tab" data-tab="chars" hidden>
+      <div class="sect">CHARACTERS <span class="dim">(this scene)</span></div>
       <div class="row2">
         <select id="charType" aria-label="Character type"></select>
         <button id="addChar">+ Add</button>
@@ -126,56 +194,109 @@
       <p id="charEmpty" class="dim small">No characters in this scene yet. Add one, then shape it with the sliders.</p>
       <div id="charList" class="bin"></div>
       <div id="charEditor"></div>
-    </details>
+    </section>
 
-    <details class="group" open>
-      <summary>EFFECT LIBRARY <span class="dim">(<span id="fxCount"></span> effects)</span></summary>
-      <div class="subhead">Effects on this scene, applied top to bottom</div>
-      <p id="fxStackEmpty" class="dim small">None yet. Click any effect below to stack it.</p>
-      <div id="fxStack"></div>
+    <!-- 3D -->
+    <section class="tab" data-tab="models" hidden>
+      <div class="sect">3D MODELS <span class="dim">(this scene)</span></div>
       <div class="row2">
-        <button id="fxRandom">🎲 Random effect</button>
-        <button id="fxChaos">Chaos ×3</button>
-        <button id="fxClear" class="ghost-sm">Clear</button>
+        <select id="modelSrc" aria-label="Model"></select>
+        <button id="addModel">+ Add</button>
+        <label class="btn">Import model<input type="file" id="modelImport" accept=".obj,.stl,.glb,.gltf,.ply" multiple hidden></label>
       </div>
-      <div class="row2">
-        <input id="fxSearch" type="text" placeholder="Search: kaleidoscope, blood, drowned…" aria-label="Search effects">
-        <select id="fxCat" aria-label="Category"><option value="">All</option></select>
-      </div>
-      <div id="fxList" class="fx-list"></div>
-      <p id="fxHits" class="dim small"></p>
-    </details>
+      <p class="dim small">Imports OBJ, STL, GLB, glTF (embedded) and ASCII PLY. Very detailed models are thinned to about 6,000 faces so playback stays smooth.</p>
+      <div id="modelList" class="bin"></div>
+      <div id="modelEditor"></div>
+    </section>
 
-    <details class="group">
-      <summary>SCRIPT / VFX / 3D</summary>
+    <!-- IMAGES -->
+    <section class="tab" data-tab="images" hidden>
+      <div class="sect">IMAGE LAYERS <span class="dim">(this scene)</span></div>
       <div class="row2">
-        <select id="examples" aria-label="Script examples"><option value="">Examples…</option></select>
-        <button id="insertExample">Load</button>
-        <label class="chk"><input type="checkbox" id="scriptOn" checked> On</label>
+        <select id="imgSrc" aria-label="Image"></select>
+        <button id="addImg">+ Add</button>
+        <label class="btn">Import image<input type="file" id="imgImport" accept="image/*" multiple hidden></label>
       </div>
-      <textarea id="code" class="code" spellcheck="false" rows="12" placeholder="// JavaScript that runs every frame. Pick an example to start."></textarea>
-      <pre id="scriptErr" class="err" hidden></pre>
-      <details class="api"><summary>Script reference</summary><pre id="scriptHelp"></pre></details>
-    </details>
+      <p class="dim small">Faces in windows, missing-person posters, photos that flash for a frame. Drag to place them right on the preview.</p>
+      <div id="imgList" class="bin"></div>
+      <div id="imgEditor"></div>
+    </section>
 
-    <div id="controls"></div>
+    <!-- AUDIO -->
+    <section class="tab" data-tab="audio" hidden>
+      <div class="sect">SOUNDS IN THIS SCENE</div>
+      <p id="soundEmpty" class="dim small">No sounds yet. Generate one below or import audio.</p>
+      <div id="soundList" class="bin"></div>
+      <div id="soundEditor"></div>
+
+      <div class="sect">SFX GENERATOR</div>
+      <div class="row2">
+        <label class="chk">Pitch <input id="sfxPitch" type="range" min="0.3" max="2.5" step="0.05" value="1"></label>
+        <label class="chk">Length <input id="sfxLen" type="range" min="0" max="20" step="0.5" value="0"></label>
+        <span id="sfxLenVal" class="dim">auto</span>
+      </div>
+      <div id="sfxList" class="sfx-grid"></div>
+
+      <div class="sect">YOUR AUDIO</div>
+      <div class="row2">
+        <label class="btn">Import audio<input type="file" id="audioImport" accept="audio/*,video/*" multiple hidden></label>
+        <button id="micBtn">🎙 Record voice</button>
+      </div>
+      <div id="audioBin" class="bin"></div>
+    </section>
+
+    <!-- ARG -->
+    <section class="tab" data-tab="arg" hidden>
+      <div class="sect">ARG TOOLS</div>
+      <p class="dim small">Hide clues for your audience to find.</p>
+      <label class="row textarea"><span>Secret message</span><textarea id="argText" rows="2">THEY ARE STILL IN THE HOUSE</textarea></label>
+      <div class="subhead">Encode text</div>
+      <div class="row2">
+        <select id="argCipher" aria-label="Cipher">
+          <option value="caesar">Caesar shift (ROT13)</option><option value="atbash">Atbash</option><option value="a1z26">A1Z26 numbers</option>
+          <option value="binary">Binary</option><option value="hex">Hex</option><option value="base64">Base64</option><option value="morse">Morse code (dots and dashes)</option><option value="reverse">Backwards</option>
+        </select>
+        <button id="argEncode">Encode</button>
+      </div>
+      <textarea id="argOut" rows="3" readonly class="code" style="min-height:60px"></textarea>
+      <div class="row2">
+        <button id="argToCrawl">Use as crawl text</button>
+        <button id="argToTitle">Use as title card</button>
+        <button id="argToSub">Use as subliminal</button>
+      </div>
+      <div class="subhead">Hide it in sound</div>
+      <div class="row2">
+        <button id="argMorse">+ Morse beeps</button>
+        <button id="argSpectro">+ Spectrogram message</button>
+      </div>
+      <p class="dim small">A spectrogram message sounds like harsh noise, but the text shows up when someone opens the audio in a spectrogram viewer (Audacity, Sonic Visualiser). It gets added to this scene's sounds.</p>
+    </section>
+
+    <!-- MEDIA -->
+    <section class="tab" data-tab="media" hidden>
+      <div class="sect">MEDIA BIN</div>
+      <div class="row2">
+        <label class="btn primary">+ Import anything<input type="file" id="importAny" multiple hidden></label>
+      </div>
+      <p class="dim small">Video, images, GIFs, audio, 3D models, fonts (TTF/OTF/WOFF), text files and projects. Other files are kept in the bin too.</p>
+      <div id="mediaGrid" class="media-grid"></div>
+    </section>
+
+    <!-- INSPIRATION -->
+    <section class="tab" data-tab="inspo" hidden>
+      <div class="sect">INSPIRATION</div>
+      <form id="inspoForm" class="row2">
+        <input id="inspoQ" type="text" placeholder="Search analog horror: VHS, broadcast, backrooms…" aria-label="Search analog horror">
+        <button type="submit">Search</button>
+      </form>
+      <div id="inspoGrid" class="inspo-grid"></div>
+      <p class="row2">
+        <a class="btn" href="https://www.reddit.com/r/analoghorror/" target="_blank" rel="noopener">r/analoghorror</a>
+        <a class="btn" href="https://www.youtube.com/results?search_query=analog+horror+tutorial" target="_blank" rel="noopener">Tutorials</a>
+      </p>
+    </section>
   </aside>
 </main>
-
-<dialog id="inspo" class="picker">
-  <h2>Analog horror inspiration</h2>
-  <p class="dim">Well-known works and what to learn from each. Each card opens a YouTube search.</p>
-  <form id="inspoForm" class="row2">
-    <input id="inspoQ" type="text" placeholder="Search analog horror: VHS, broadcast, backrooms, puppets…" aria-label="Search analog horror">
-    <button type="submit">Search YouTube</button>
-  </form>
-  <div id="inspoGrid" class="inspo-grid"></div>
-  <p class="row2">
-    <a class="btn" href="https://www.reddit.com/r/analoghorror/" target="_blank" rel="noopener">r/analoghorror</a>
-    <a class="btn" href="https://www.youtube.com/results?search_query=analog+horror+tutorial" target="_blank" rel="noopener">Tutorials</a>
-    <button id="inspoClose" class="ghost-sm">Close</button>
-  </p>
-</dialog>
 
 <dialog id="picker" class="picker">
   <h2>Choose a game window or screen</h2>
@@ -186,6 +307,9 @@
 <script src="fx.js"></script>
 <script src="effects.js"></script>
 <script src="characters.js"></script>
+<script src="layers.js"></script>
+<script src="audio.js"></script>
+<script src="menu.js"></script>
 <script src="app.js"></script>
 <script src="auth.js"></script>
 </body>

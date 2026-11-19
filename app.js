@@ -59,6 +59,7 @@ const PARAMS = [
   { id: 'titleText', group: 'Overlays', label: 'Title text', type: 'textarea', def: 'THE FOLLOWING FOOTAGE\nWAS RECOVERED\nIN 1994' },
   { id: 'titleBg', group: 'Overlays', label: 'Title background', type: 'select', def: 'black', options: [['none', 'Over footage'], ['black', 'Black'], ['blue', 'Broadcast blue']] },
   { id: 'titleType', group: 'Overlays', label: 'Typewriter title', type: 'check', def: false },
+  { id: 'font', group: 'Overlays', label: 'Overlay font', type: 'select', def: 'VT323', options: [['VT323', 'VT323 (VHS)'], ['Courier New', 'Typewriter'], ['Georgia', 'Serif'], ['Arial', 'Sans-serif'], ['Impact', 'Impact']] },
   { id: 'subText', group: 'Overlays', label: 'Subliminal text', type: 'text', def: 'IT SEES YOU' },
   { id: 'subRate', group: 'Overlays', label: 'Subliminal rate', type: 'range', min: 0, max: 100, def: 0 },
 
@@ -124,7 +125,7 @@ const uid = () => 's' + Date.now().toString(36) + (uidN++).toString(36);
 function makeScene(o = {}) {
   return {
     id: uid(), name: 'Scene', src: 'testcard', inPt: 0, outPt: null, dur: 5,
-    trans: 'cut', fadeOut: false, script: '', scriptOn: true, chars: [], fxStack: [], ...o,
+    trans: 'cut', fadeOut: false, script: '', scriptOn: true, chars: [], fxStack: [], models: [], images: [], sounds: [], ...o,
     params: { ...DEFAULTS, ...(o.params || {}) },
   };
 }
@@ -281,20 +282,6 @@ function buildTestcard(force) {
 // ---------- media bin ----------
 const media = new Map(); // file name -> { name, kind, url, el, node }
 
-function addModel(file) {
-  const fr = new FileReader();
-  fr.onload = () => {
-    try {
-      media.set(file.name, { name: file.name, kind: 'model', mesh: HC3D.parseOBJ(fr.result) });
-      flashStatus(`Model ready: use model('${file.name}') in a script`);
-      renderBin();
-    } catch (e) {
-      flashStatus('Could not read model: ' + e.message);
-    }
-  };
-  fr.readAsText(file);
-}
-
 function addMedia(file) {
   const name = file.name;
   const old = media.get(name);
@@ -319,40 +306,102 @@ function addMedia(file) {
   return m;
 }
 
-function addFiles(fileList) {
-  const files = [...fileList].filter(f => /^(video|image)\//.test(f.type));
-  const json = [...fileList].find(f => f.name.endsWith('.json'));
-  if (json) { openProjectFile(json); return; }
-  [...fileList].filter(f => /\.obj$/i.test(f.name)).forEach(addModel);
-  if (!files.length) return;
-  let added = 0;
+const AUDIO_EXT = /\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|weba)$/i;
+const FONT_EXT = /\.(ttf|otf|woff2?)$/i;
+const TEXT_EXT = /\.(txt|md|srt|vtt|csv)$/i;
+
+function kindOf(f) {
+  if (/\.json$/i.test(f.name)) return 'project';
+  if (HCLayers.MODEL_EXT.test(f.name)) return 'model';
+  if (FONT_EXT.test(f.name)) return 'font';
+  if (f.type.startsWith('audio/') || AUDIO_EXT.test(f.name)) return 'audio';
+  if (f.type.startsWith('video/')) return 'video';
+  if (f.type.startsWith('image/')) return 'image';
+  if (f.type.startsWith('text/') || TEXT_EXT.test(f.name)) return 'text';
+  return 'other';
+}
+
+// Import any files. Returns the media entries that were added.
+async function importFiles(fileList, opts = {}) {
+  const files = [...fileList];
+  const added = [];
+  const proj = files.find(f => kindOf(f) === 'project');
+  if (proj) { openProjectFile(proj); return added; }
   for (const f of files) {
-    const key = 'm:' + f.name;
-    const linked = project.scenes.some(s => s.src === key);
-    addMedia(f);
-    if (!linked) {
-      // Replace an untouched starter scene, otherwise append.
+    const k = kindOf(f);
+    try {
+      if (k === 'video' || k === 'image') added.push(addMedia(f));
+      else if (k === 'audio') {
+        const buffer = await HCAudio.decode(await f.arrayBuffer());
+        const m = { name: f.name, kind: 'audio', buffer };
+        media.set(f.name, m); added.push(m);
+      } else if (k === 'model') {
+        const mesh = await HCLayers.loadModel(f);
+        const m = { name: f.name, kind: 'model', mesh };
+        media.set(f.name, m); added.push(m);
+        if (mesh.original > mesh.f.length) flashStatus(`${f.name}: ${mesh.original.toLocaleString()} faces thinned to ${mesh.f.length.toLocaleString()}`);
+      } else if (k === 'font') {
+        const fam = f.name.replace(/\.[^.]+$/, '');
+        const face = new FontFace(fam, await f.arrayBuffer());
+        await face.load();
+        document.fonts.add(face);
+        const m = { name: f.name, kind: 'font', family: fam };
+        media.set(f.name, m); added.push(m);
+        addFontOption(fam);
+      } else if (k === 'text') {
+        const m = { name: f.name, kind: 'text', text: (await f.text()).slice(0, 20000) };
+        media.set(f.name, m); added.push(m);
+      } else {
+        const m = { name: f.name, kind: 'other', size: f.size, type: f.type || 'unknown' };
+        media.set(f.name, m); added.push(m);
+      }
+    } catch (e) {
+      flashStatus(`Could not import ${f.name}: ${e.message}`);
+    }
+  }
+
+  // Dropped on the screen or imported from the stage: videos and images become new scenes.
+  if (opts.asScenes) {
+    let n = 0;
+    for (const m of added) {
+      if (m.kind !== 'video' && m.kind !== 'image') continue;
+      const key = 'm:' + m.name;
+      if (project.scenes.some(s => s.src === key)) continue;
       const s = makeScene({
-        name: f.name.replace(/\.[^.]+$/, '').slice(0, 24), src: key,
-        dur: f.type.startsWith('image/') ? 6 : 5, trans: 'static',
+        name: m.name.replace(/\.[^.]+$/, '').slice(0, 24), src: key, dur: m.kind === 'image' ? 6 : 5, trans: 'static',
         params: { ...P },
       });
       s.params.titleOn = false;
       project.scenes.splice(sel + 1, 0, s);
-      sel++;
-      added++;
+      sel++; n++;
+    }
+    if (n) { checkpoint(); enterScene(sel, 0, true); }
+    // Other kinds land where they make sense in the current scene.
+    for (const m of added) {
+      if (m.kind === 'model') cur().models.push(HCLayers.newModel('m:' + m.name));
+      if (m.kind === 'audio') cur().sounds.push(HCAudio.newSound('m:' + m.name));
     }
   }
-  checkpoint();
-  enterScene(sel, 0, true);
-  renderAll();
-  flashStatus(added ? `Added ${added} scene${added > 1 ? 's' : ''}` : 'Relinked media');
+  if (added.length) {
+    checkpoint();
+    renderAll();
+    flashStatus(`Imported ${added.length} file${added.length > 1 ? 's' : ''}`);
+  }
+  return added;
+}
+const addFiles = files => importFiles(files, { asScenes: true });
+
+function addFontOption(fam) {
+  const el = controlEls.font;
+  if (el && ![...el.options].some(o => o.value === fam)) el.append(new Option(fam + ' (imported)', fam));
+  const p = PARAMS.find(x => x.id === 'font');
+  if (!p.options.some(o => o[0] === fam)) p.options.push([fam, fam + ' (imported)']);
 }
 
 function resolve(s) {
   if (s.src.startsWith('m:')) {
     const m = media.get(s.src.slice(2));
-    return m && m.kind !== 'model' ? m : { kind: 'offline', name: s.src.slice(2) };
+    return m && (m.kind === 'video' || m.kind === 'image') ? m : { kind: 'offline', name: s.src.slice(2) };
   }
   return { kind: s.src };
 }
@@ -456,7 +505,7 @@ function stopScreen() {
 }
 
 // ---------- audio ----------
-let ac = null, recDest, recGain, videoGain, noiseGain, humGain, toneGain, droneGain, burstGain;
+let ac = null, masterOut = null, recDest, recGain, videoGain, noiseGain, humGain, toneGain, droneGain, burstGain;
 
 function connectMedia(m) {
   if (ac && m.kind === 'video' && !m.node) {
@@ -471,6 +520,7 @@ function initAudio() {
   if (!AC) return;
   ac = new AC();
   const master = ac.createGain();
+  masterOut = master;
   master.connect(ac.destination);
   recDest = ac.createMediaStreamDestination();
   master.connect(recDest);
@@ -573,6 +623,7 @@ const cur = () => project.scenes[prog.idx];
 function enterScene(i, t = 0, force) {
   i = Math.min(Math.max(0, i), project.scenes.length - 1);
   const s = project.scenes[i], r = resolve(s);
+  HCAudio.stopAll();
   const changed = force || prog.idx !== i || P !== s.params;
   prog.idx = i;
   prog.t = Math.max(0, t);
@@ -599,6 +650,7 @@ function enterScene(i, t = 0, force) {
     syncScriptPanel();
     renderChars();
     renderFxStack();
+    renderLayerTabs();
     renderTimeline();
   }
 }
@@ -651,7 +703,7 @@ function advance(dt) {
 }
 
 // ---------- drawing ----------
-const FONT = 'VT323, monospace';
+const font = () => `"${P.font || 'VT323'}", VT323, monospace`;
 
 function txt(c, s, x, y, color = '#f2f2f2') {
   c.fillStyle = 'rgba(0,0,0,0.65)';
@@ -743,18 +795,18 @@ function drawOverlays(r, t, a) {
   c.textAlign = 'left';
 
   if (r.kind === 'screen' && !screenStream) {
-    c.font = `34px ${FONT}`;
+    c.font = `34px ${font()}`;
     c.textAlign = 'center';
     txt(c, 'NO SIGNAL', W / 2, H / 2 - 30, '#ff3b30');
-    c.font = `24px ${FONT}`;
+    c.font = `24px ${font()}`;
     txt(c, 'click 🎮 Game capture to connect a game window', W / 2, H / 2 + 10, '#9a9a9a');
     c.textAlign = 'left';
   }
   if (r.kind === 'offline') {
-    c.font = `40px ${FONT}`;
+    c.font = `40px ${font()}`;
     c.textAlign = 'center';
     txt(c, 'MEDIA OFFLINE', W / 2, H / 2 - 40, '#ff3b30');
-    c.font = `26px ${FONT}`;
+    c.font = `26px ${font()}`;
     txt(c, r.name.slice(0, 40), W / 2, H / 2 + 4);
     txt(c, 'add this file again to relink it', W / 2, H / 2 + 34, '#9a9a9a');
     c.textAlign = 'left';
@@ -767,7 +819,7 @@ function drawOverlays(r, t, a) {
 
   const blinkOn = !P.osdBlink || Math.floor(t * 1.25) % 2 === 0;
   if (P.osd !== 'none' && !P.titleOn) {
-    c.font = `36px ${FONT}`;
+    c.font = `36px ${font()}`;
     txt(c, P.osd, 36, 26);
     const ix = 36 + c.measureText(P.osd).width + 14, iy = 30;
     if (blinkOn) {
@@ -781,14 +833,14 @@ function drawOverlays(r, t, a) {
   }
 
   if (P.camText && !P.titleOn) {
-    c.font = `36px ${FONT}`;
+    c.font = `36px ${font()}`;
     c.textAlign = 'right';
     txt(c, P.camText, W - 36, 26);
     c.textAlign = 'left';
   }
 
   if (!P.titleOn) {
-    c.font = `32px ${FONT}`;
+    c.font = `32px ${font()}`;
     if (P.timecode) txt(c, fmtClock(parseClock(P.tcStart) + a), 36, H - 92);
     if (P.dateText) txt(c, P.dateText, 36, H - 62);
   }
@@ -803,7 +855,7 @@ function drawOverlays(r, t, a) {
     }
     const lines = text.split('\n');
     const all = String(P.titleText || '').split('\n');
-    c.font = `46px ${FONT}`;
+    c.font = `46px ${font()}`;
     const lh = 50, y0 = H / 2 - (all.length * lh) / 2;
     lines.forEach((ln, i) => {
       const full = all[i] || ln;
@@ -822,7 +874,7 @@ function drawOverlays(r, t, a) {
     c.fillRect(0, y, W, bh);
     c.fillStyle = '#c4141a';
     c.fillRect(0, y, W, 3); c.fillRect(0, y + bh - 3, W, 3);
-    c.font = `36px ${FONT}`;
+    c.font = `36px ${font()}`;
     const msg = String(P.crawlText).replace(/\s+/g, ' ') + '     ';
     const tw = c.measureText(msg).width;
     const x = W - ((a * P.crawlSpeed * 30) % (tw + W));
@@ -833,7 +885,7 @@ function drawOverlays(r, t, a) {
     const inv = Math.random() < 0.5;
     c.fillStyle = inv ? '#e8e8e8' : '#000';
     c.fillRect(0, 0, W, H);
-    c.font = `96px ${FONT}`;
+    c.font = `96px ${font()}`;
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillStyle = inv ? '#000' : '#d0101a';
     c.fillText(P.subText, W / 2, H / 2);
@@ -1111,11 +1163,15 @@ function frame(now) {
 
   frameNo++;
   drawSource(r, a);
+  HCLayers.renderImages(bctx, s.images, a, 'back', media);
   runScript(s, t, a, dt);
+  HCLayers.renderModels(bctx, s.models, a, media);
   for (const ch of s.chars || []) {
     try { HCChar.render(bctx, ch, a); } catch (e) { /* skip a broken character */ }
   }
+  HCLayers.renderImages(bctx, s.images, a, 'front', media);
   HCFX.apply(bctx, s.fxStack, a, t);
+  if (ac) HCAudio.tick(ac, masterOut, s.sounds, a, prog.playing, sceneDur(s), media);
   // Script overrides last one frame: apply them, render, then put the real values back.
   const saved = {};
   for (const k in overrides) { saved[k] = P[k]; P[k] = overrides[k]; }
@@ -1370,7 +1426,7 @@ const ins = {
 
 function sourceOptions() {
   const opts = [['testcard', 'Test card (color bars)'], ['black', 'Black'], ['webcam', 'Webcam (live)'], ['screen', 'Game / screen capture (live)']];
-  const names = new Set([...media.values()].filter(m => m.kind !== 'model').map(m => m.name));
+  const names = new Set([...media.values()].filter(m => m.kind === 'video' || m.kind === 'image').map(m => m.name));
   project.scenes.forEach(s => { if (s.src.startsWith('m:')) names.add(s.src.slice(2)); });
   names.forEach(n => opts.push(['m:' + n, (media.has(n) ? (media.get(n).kind === 'video' ? '▶ ' : '▣ ') : '✕ OFFLINE ') + n]));
   return opts;
@@ -1854,13 +1910,495 @@ function renderInspiration() {
     grid.append(card);
   }
 }
-$('#inspoBtn').addEventListener('click', () => { renderInspiration(); $('#inspo').showModal(); });
-$('#inspoClose').addEventListener('click', () => $('#inspo').close());
+renderInspiration();
 $('#inspoForm').addEventListener('submit', e => {
   e.preventDefault();
   const q = $('#inspoQ').value.trim();
   window.open(ytSearch('analog horror ' + q), '_blank', 'noopener');
 });
+
+
+// ---------- generic form builder (layers, menu) ----------
+function buildForm(box, obj, schema, onChange) {
+  for (const [group, fields] of schema) {
+    const g = document.createElement('div');
+    g.className = 'subhead';
+    g.textContent = group;
+    box.append(g);
+    for (const [key, label, type, a, b, step] of fields) {
+      const row = document.createElement('label');
+      row.className = 'row ' + (type === 'range' ? 'range' : type === 'check' ? 'check' : type === 'textarea' ? 'textarea' : 'select');
+      const nm = document.createElement('span'); nm.textContent = label; row.append(nm);
+      let el, val;
+      if (type === 'range') el = Object.assign(document.createElement('input'), { type: 'range', min: a, max: b, step, value: obj[key] });
+      else if (type === 'select' || type === 'font') {
+        el = document.createElement('select');
+        const opts = type === 'font'
+          ? [['VT323', 'VT323 (VHS)'], ['Courier New', 'Typewriter'], ['Georgia', 'Serif'], ['Arial', 'Sans-serif'], ['Impact', 'Impact'],
+            ...[...media.values()].filter(m => m.kind === 'font').map(m => [m.family, m.family + ' (imported)'])]
+          : a;
+        for (const o of opts) { const [v, l] = Array.isArray(o) ? o : [o, o]; el.append(new Option(l, v)); }
+        el.value = obj[key];
+      } else if (type === 'check') el = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!obj[key] });
+      else if (type === 'color') el = Object.assign(document.createElement('input'), { type: 'color', value: obj[key] });
+      else if (type === 'image') el = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+      else if (type === 'textarea') { el = document.createElement('textarea'); el.rows = 2; el.value = obj[key] || ''; }
+      else el = Object.assign(document.createElement('input'), { type: 'text', value: obj[key] ?? '' });
+      row.append(el);
+      if (type === 'range') { val = document.createElement('span'); val.className = 'val'; val.textContent = obj[key]; row.append(val); }
+      if (type === 'image') {
+        el.addEventListener('change', () => {
+          const f = el.files[0]; if (!f) return;
+          const im = new Image();
+          im.onload = () => {
+            const k = Math.min(1, 1280 / im.naturalWidth), c = document.createElement('canvas');
+            c.width = im.naturalWidth * k; c.height = im.naturalHeight * k;
+            c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+            obj[key] = c.toDataURL('image/jpeg', 0.8);
+            URL.revokeObjectURL(im.src);
+            onChange(key);
+          };
+          im.src = URL.createObjectURL(f);
+        });
+      } else {
+        el.addEventListener('input', () => {
+          obj[key] = type === 'range' ? parseFloat(el.value) : type === 'check' ? el.checked : el.value;
+          if (val) val.textContent = obj[key];
+          onChange(key, false);
+        });
+        el.addEventListener('change', () => onChange(key, true));
+      }
+      box.append(row);
+    }
+  }
+}
+
+// ---------- layer tabs (3D models, images, sounds) ----------
+const layerSel = { models: 0, images: 0, sounds: 0 };
+
+function renderLayerList(kind, listEl, editorEl, emptyEl, schema, extra) {
+  const s = cur();
+  if (!s) return;
+  const arr = s[kind] = s[kind] || [];
+  listEl.innerHTML = '';
+  editorEl.innerHTML = '';
+  if (emptyEl) emptyEl.hidden = arr.length > 0;
+  if (layerSel[kind] >= arr.length) layerSel[kind] = arr.length - 1;
+  arr.forEach((l, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (i === layerSel[kind] ? ' active' : '');
+    b.textContent = l.name || l.src;
+    b.addEventListener('click', () => { layerSel[kind] = i; renderLayerTabs(); });
+    listEl.append(b);
+  });
+  const l = arr[layerSel[kind]];
+  if (!l) return;
+  const top = document.createElement('div');
+  top.className = 'row2';
+  const nm = Object.assign(document.createElement('input'), { type: 'text', value: l.name || '' });
+  nm.style.flex = '1';
+  nm.addEventListener('input', () => { l.name = nm.value; save(); });
+  nm.addEventListener('change', () => { checkpoint(); renderLayerTabs(); });
+  top.append(nm);
+  if (extra) extra(top, l);
+  const dup = Object.assign(document.createElement('button'), { textContent: 'Copy', className: 'ghost-sm' });
+  dup.addEventListener('click', () => { arr.push({ ...JSON.parse(JSON.stringify(l)), id: l.id + 'c' + arr.length }); layerSel[kind] = arr.length - 1; checkpoint(); renderLayerTabs(); });
+  const del = Object.assign(document.createElement('button'), { textContent: 'Remove', className: 'ghost-sm' });
+  del.addEventListener('click', () => { arr.splice(layerSel[kind], 1); checkpoint(); renderLayerTabs(); });
+  top.append(dup, del);
+  editorEl.append(top);
+  buildForm(editorEl, l, schema, (k, done) => { if (done) checkpoint(); else save(); });
+}
+
+function refreshPickers() {
+  const fill = (el, opts) => { const v = el.value; el.innerHTML = ''; opts.forEach(([val, l]) => el.append(new Option(l, val))); if ([...el.options].some(o => o.value === v)) el.value = v; };
+  fill($('#modelSrc'), [
+    ...Object.keys(HCLayers.BUILTINS).map(k => ['b:' + k, 'Built-in: ' + k]),
+    ...[...media.values()].filter(m => m.kind === 'model').map(m => ['m:' + m.name, '◆ ' + m.name]),
+  ]);
+  const imgs = [...media.values()].filter(m => m.kind === 'image');
+  fill($('#imgSrc'), imgs.length ? imgs.map(m => ['m:' + m.name, m.name]) : [['', 'Import an image first']]);
+}
+
+function renderLayerTabs() {
+  if (!cur()) return;
+  refreshPickers();
+  renderLayerList('models', $('#modelList'), $('#modelEditor'), null, HCLayers.MODEL_SCHEMA);
+  renderLayerList('images', $('#imgList'), $('#imgEditor'), null, HCLayers.IMAGE_SCHEMA);
+  renderLayerList('sounds', $('#soundList'), $('#soundEditor'), $('#soundEmpty'), HCAudio.SOUND_SCHEMA, (top, l) => {
+    const pv = Object.assign(document.createElement('button'), { textContent: '▶', title: 'Preview' });
+    pv.addEventListener('click', () => { initAudio(); HCAudio.preview(ac, masterOut, l, media); });
+    top.append(pv);
+    if (l.src.startsWith('sfx:')) {
+      const vr = Object.assign(document.createElement('button'), { textContent: '🎲', title: 'New variation' });
+      vr.addEventListener('click', () => {
+        const parts = l.src.split(':');
+        parts[2] = String((Math.random() * 1e6) | 0);
+        l.src = parts.join(':');
+        checkpoint();
+        initAudio(); HCAudio.preview(ac, masterOut, l, media);
+      });
+      top.append(vr);
+    }
+  });
+  renderAudioBin();
+  renderMediaTab();
+}
+
+$('#addModel').addEventListener('click', () => {
+  const src = $('#modelSrc').value;
+  if (!src) return;
+  cur().models.push(HCLayers.newModel(src));
+  layerSel.models = cur().models.length - 1;
+  checkpoint(); renderLayerTabs();
+});
+$('#modelImport').addEventListener('change', async e => {
+  const added = await importFiles(e.target.files);
+  e.target.value = '';
+  added.filter(m => m.kind === 'model').forEach(m => cur().models.push(HCLayers.newModel('m:' + m.name)));
+  layerSel.models = cur().models.length - 1;
+  checkpoint(); renderLayerTabs();
+});
+$('#addImg').addEventListener('click', () => {
+  const src = $('#imgSrc').value;
+  if (!src) return flashStatus('Import an image first');
+  cur().images.push(HCLayers.newImage(src));
+  layerSel.images = cur().images.length - 1;
+  checkpoint(); renderLayerTabs();
+});
+$('#imgImport').addEventListener('change', async e => {
+  const added = await importFiles(e.target.files);
+  e.target.value = '';
+  added.filter(m => m.kind === 'image').forEach(m => cur().images.push(HCLayers.newImage('m:' + m.name)));
+  layerSel.images = cur().images.length - 1;
+  checkpoint(); renderLayerTabs();
+});
+
+// Drag the selected image layer around on the preview while the Images tab is open.
+(() => {
+  let drag = null;
+  const toCanvas = e => { const r = view.getBoundingClientRect(); return [(e.clientX - r.left) * (W / r.width), (e.clientY - r.top) * (H / r.height)]; };
+  view.addEventListener('pointerdown', e => {
+    if (currentTab !== 'images') return;
+    const l = (cur().images || [])[layerSel.images];
+    if (!l) return;
+    const [x, y] = toCanvas(e);
+    drag = { l, dx: l.x - x, dy: l.y - y };
+    view.setPointerCapture(e.pointerId);
+  });
+  view.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const [x, y] = toCanvas(e);
+    drag.l.x = Math.round(x + drag.dx); drag.l.y = Math.round(y + drag.dy);
+  });
+  view.addEventListener('pointerup', () => { if (drag) { drag = null; checkpoint(); renderLayerTabs(); } });
+})();
+
+// ---------- audio tab ----------
+function sfxSrc(key) {
+  const len = +$('#sfxLen').value;
+  return `sfx:${key}:${(Math.random() * 1e6) | 0}:${$('#sfxPitch').value}:${len || 0}`;
+}
+function buildSfxList() {
+  const box = $('#sfxList');
+  box.innerHTML = '';
+  for (const cat of HCAudio.CATS) {
+    const h = document.createElement('div'); h.className = 'subhead'; h.textContent = cat; box.append(h);
+    for (const [key, g] of Object.entries(HCAudio.GENS)) {
+      if (g.cat !== cat) continue;
+      const row = document.createElement('div');
+      row.className = 'sfx-row';
+      const name = document.createElement('span'); name.textContent = g.name;
+      const pv = Object.assign(document.createElement('button'), { textContent: '▶', title: 'Preview a variation' });
+      pv.addEventListener('click', () => { initAudio(); HCAudio.preview(ac, masterOut, HCAudio.newSound(sfxSrc(key)), media); });
+      const add = Object.assign(document.createElement('button'), { textContent: '+ Add', title: 'Add to this scene at the playhead' });
+      add.addEventListener('click', () => {
+        const snd = HCAudio.newSound(sfxSrc(key));
+        snd.name = g.name;
+        snd.at = +prog.t.toFixed(2);
+        cur().sounds.push(snd);
+        layerSel.sounds = cur().sounds.length - 1;
+        checkpoint(); renderLayerTabs();
+        flashStatus(`${g.name} added at ${snd.at}s`);
+      });
+      row.append(name, pv, add);
+      box.append(row);
+    }
+  }
+}
+$('#sfxLen').addEventListener('input', () => { $('#sfxLenVal').textContent = +$('#sfxLen').value ? $('#sfxLen').value + 's' : 'auto'; });
+
+function addSoundFromMedia(m) {
+  const snd = HCAudio.newSound('m:' + m.name);
+  snd.name = m.name;
+  snd.at = +prog.t.toFixed(2);
+  cur().sounds.push(snd);
+  layerSel.sounds = cur().sounds.length - 1;
+  checkpoint(); renderLayerTabs();
+}
+function renderAudioBin() {
+  const box = $('#audioBin');
+  box.innerHTML = '';
+  for (const m of media.values()) {
+    if (m.kind !== 'audio') continue;
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.textContent = '♪ ' + m.name;
+    b.title = 'Add to this scene at the playhead';
+    b.addEventListener('click', () => addSoundFromMedia(m));
+    box.append(b);
+  }
+}
+$('#audioImport').addEventListener('change', async e => {
+  const added = await importFiles(e.target.files);
+  e.target.value = '';
+  added.filter(m => m.kind === 'audio').forEach(addSoundFromMedia);
+});
+let voiceN = 0;
+$('#micBtn').addEventListener('click', async () => {
+  const btn = $('#micBtn');
+  if (HCAudio.recording()) { HCAudio.toggleMic(); return; }
+  try {
+    const pending = await HCAudio.toggleMic();
+    btn.textContent = '■ Stop recording';
+    btn.classList.add('rec', 'on');
+    const blob = await pending;
+    btn.textContent = '🎙 Record voice';
+    btn.classList.remove('rec', 'on');
+    const buffer = await HCAudio.decode(await blob.arrayBuffer());
+    const m = { name: `Voice ${++voiceN}`, kind: 'audio', buffer };
+    media.set(m.name, m);
+    addSoundFromMedia(m);
+    flashStatus('Voice recorded. Try the demon, radio or ghost voice FX.');
+  } catch (err) {
+    btn.textContent = '🎙 Record voice';
+    flashStatus('Microphone unavailable: ' + err.message);
+  }
+});
+
+// ---------- ARG tools ----------
+const MORSE = { A: '.-', B: '-...', C: '-.-.', D: '-..', E: '.', F: '..-.', G: '--.', H: '....', I: '..', J: '.---', K: '-.-', L: '.-..', M: '--', N: '-.', O: '---', P: '.--.', Q: '--.-', R: '.-.', S: '...', T: '-', U: '..-', V: '...-', W: '.--', X: '-..-', Y: '-.--', Z: '--..', 0: '-----', 1: '.----', 2: '..---', 3: '...--', 4: '....-', 5: '.....', 6: '-....', 7: '--...', 8: '---..', 9: '----.' };
+function encode(text, how) {
+  const T = text.toUpperCase();
+  switch (how) {
+    case 'caesar': return text.replace(/[a-z]/gi, ch => { const b = ch <= 'Z' ? 65 : 97; return String.fromCharCode(((ch.charCodeAt(0) - b + 13) % 26) + b); });
+    case 'atbash': return T.replace(/[A-Z]/g, ch => String.fromCharCode(155 - ch.charCodeAt(0)));
+    case 'a1z26': return T.split(' ').map(w => [...w].filter(c => /[A-Z]/.test(c)).map(c => c.charCodeAt(0) - 64).join('-')).join(' / ');
+    case 'binary': return [...text].map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join(' ');
+    case 'hex': return [...text].map(c => c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase()).join(' ');
+    case 'base64': try { return btoa(unescape(encodeURIComponent(text))); } catch (e) { return ''; }
+    case 'morse': return [...T].map(c => c === ' ' ? '/' : MORSE[c] || '').join(' ');
+    case 'reverse': return [...text].reverse().join('');
+  }
+  return text;
+}
+$('#argEncode').addEventListener('click', () => { $('#argOut').value = encode($('#argText').value, $('#argCipher').value); });
+const argValue = () => $('#argOut').value || $('#argText').value;
+$('#argToCrawl').addEventListener('click', () => { P.crawlText = argValue(); P.crawlOn = true; syncControls(); checkpoint(); flashStatus('Crawl text set'); });
+$('#argToTitle').addEventListener('click', () => { P.titleText = argValue(); P.titleOn = true; syncControls(); checkpoint(); flashStatus('Title card set'); });
+$('#argToSub').addEventListener('click', () => { P.subText = argValue().slice(0, 40); if (!P.subRate) P.subRate = 15; syncControls(); checkpoint(); flashStatus('Subliminal text set'); });
+
+function addGeneratedAudio(name, buffer) {
+  const m = { name, kind: 'audio', buffer };
+  media.set(name, m);
+  addSoundFromMedia(m);
+  flashStatus(`Added "${name}" to this scene's sounds (Audio tab)`);
+}
+$('#argMorse').addEventListener('click', () => {
+  const code = encode($('#argText').value, 'morse'), u = 0.08, sr = 44100;
+  let len = 0.2;
+  for (const ch of code) len += ch === '.' ? u * 2 : ch === '-' ? u * 4 : ch === ' ' ? u * 2 : u * 4;
+  const buf = new AudioBuffer({ length: Math.ceil(len * sr), sampleRate: sr, numberOfChannels: 1 }), d = buf.getChannelData(0);
+  let t = 0.1;
+  for (const ch of code) {
+    const on = ch === '.' ? u : ch === '-' ? u * 3 : 0;
+    for (let i = 0; i < on * sr; i++) d[Math.floor(t * sr) + i] = Math.sin(2 * Math.PI * 700 * i / sr) * 0.5 * Math.min(1, i / 80, (on * sr - i) / 80);
+    t += on + (ch === ' ' ? u * 2 : ch === '/' ? u * 4 : u);
+  }
+  addGeneratedAudio('Morse: ' + $('#argText').value.slice(0, 20), buf);
+});
+$('#argSpectro').addEventListener('click', () => {
+  const text = $('#argText').value.toUpperCase().slice(0, 40) || 'HELLO';
+  const rows = 48, c = document.createElement('canvas');
+  const cx = c.getContext('2d');
+  cx.font = `${rows - 6}px VT323, monospace`;
+  c.width = Math.ceil(cx.measureText(text).width) + 8; c.height = rows;
+  cx.font = `${rows - 6}px VT323, monospace`;
+  cx.fillStyle = '#fff'; cx.textBaseline = 'middle'; cx.fillText(text, 4, rows / 2);
+  const img = cx.getImageData(0, 0, c.width, rows).data;
+  const sr = 44100, colDur = 0.035, spc = Math.floor(sr * colDur);
+  const buf = new AudioBuffer({ length: spc * c.width, sampleRate: sr, numberOfChannels: 1 }), d = buf.getChannelData(0);
+  const freq = r => 1500 + (rows - 1 - r) * (8500 / rows);
+  for (let x = 0; x < c.width; x++) {
+    for (let r = 0; r < rows; r++) {
+      if (img[(r * c.width + x) * 4] < 128) continue;
+      const w = 2 * Math.PI * freq(r) / sr;
+      for (let i = 0; i < spc; i++) { const n = x * spc + i; d[n] += Math.sin(w * n); }
+    }
+  }
+  let peak = 0; for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+  if (peak) for (let i = 0; i < d.length; i++) d[i] = (d[i] / peak) * 0.6;
+  addGeneratedAudio('Spectrogram: ' + text.slice(0, 20), buf);
+  flashStatus('Hidden message added. Open the export in a spectrogram viewer to see it.');
+});
+
+// ---------- media tab ----------
+const KIND_ICON = { video: '▶', image: '▣', audio: '♪', model: '◆', font: 'Aa', text: '¶', other: '•' };
+function renderMediaTab() {
+  const grid = $('#mediaGrid');
+  grid.innerHTML = '';
+  if (!media.size) { grid.innerHTML = '<p class="dim small">Nothing imported yet.</p>'; return; }
+  for (const m of media.values()) {
+    const card = document.createElement('div');
+    card.className = 'm-card';
+    const ic = document.createElement('div'); ic.className = 'm-ic';
+    if (m.kind === 'image') { ic.style.backgroundImage = `url(${m.url})`; } else ic.textContent = KIND_ICON[m.kind] || '•';
+    const info = document.createElement('div'); info.className = 'm-info';
+    const nm = document.createElement('div'); nm.textContent = m.name; nm.className = 'm-name';
+    const meta = document.createElement('div'); meta.className = 'dim';
+    meta.textContent = m.kind === 'audio' ? `audio · ${m.buffer.duration.toFixed(1)}s`
+      : m.kind === 'video' ? `video · ${isFinite(m.el.duration) ? m.el.duration.toFixed(1) + 's' : ''}`
+      : m.kind === 'model' ? `3D · ${m.mesh.f.length.toLocaleString()} faces`
+      : m.kind === 'font' ? `font · ${m.family}` : m.kind === 'other' ? `${m.type} · ${(m.size / 1024).toFixed(0)} KB` : m.kind;
+    const acts = document.createElement('div'); acts.className = 'row2';
+    const act = (label, fn) => { const b = Object.assign(document.createElement('button'), { textContent: label, className: 'ghost-sm' }); b.addEventListener('click', fn); acts.append(b); };
+    if (m.kind === 'video' || m.kind === 'image') act('Use as scene source', () => { cur().src = 'm:' + m.name; cur().inPt = 0; cur().outPt = null; checkpoint(); enterScene(prog.idx, 0, true); });
+    if (m.kind === 'image') act('+ Image layer', () => { cur().images.push(HCLayers.newImage('m:' + m.name)); layerSel.images = cur().images.length - 1; checkpoint(); showTab('images'); renderLayerTabs(); });
+    if (m.kind === 'audio') act('+ Sound', () => { addSoundFromMedia(m); showTab('audio'); });
+    if (m.kind === 'model') act('+ 3D layer', () => { cur().models.push(HCLayers.newModel('m:' + m.name)); layerSel.models = cur().models.length - 1; checkpoint(); showTab('models'); renderLayerTabs(); });
+    if (m.kind === 'font') act('Use for overlays', () => { P.font = m.family; syncControls(); checkpoint(); });
+    if (m.kind === 'text') { act('→ Crawl', () => { P.crawlText = m.text.slice(0, 2000); P.crawlOn = true; syncControls(); checkpoint(); }); act('→ Title', () => { P.titleText = m.text.slice(0, 300); P.titleOn = true; syncControls(); checkpoint(); }); }
+    act('✕', () => { media.delete(m.name); renderAll(); });
+    info.append(nm, meta, acts);
+    card.append(ic, info);
+    grid.append(card);
+  }
+}
+$('#importAny').addEventListener('change', async e => { await importFiles(e.target.files); e.target.value = ''; });
+
+// ---------- my effects (saved effect stacks) ----------
+const MYFX_KEY = 'hollowcast.myfx';
+let myFx = [];
+try { myFx = JSON.parse(localStorage.getItem(MYFX_KEY) || '[]'); } catch (e) { myFx = []; }
+function renderMyFx() {
+  const box = $('#myFxList');
+  box.innerHTML = '';
+  myFx.forEach((fx, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip model';
+    b.textContent = '★ ' + fx.name;
+    b.title = `Add ${fx.stack.length} effects. Right-click to delete.`;
+    b.addEventListener('click', () => { cur().fxStack.push(...JSON.parse(JSON.stringify(fx.stack))); checkpoint(); renderFxStack(); });
+    b.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      if (confirm(`Delete your effect "${fx.name}"?`)) { myFx.splice(i, 1); try { localStorage.setItem(MYFX_KEY, JSON.stringify(myFx)); } catch (err) { /* ignore */ } renderMyFx(); }
+    });
+    box.append(b);
+  });
+}
+$('#saveMyFx').addEventListener('click', () => {
+  const stack = cur().fxStack || [];
+  if (!stack.length) return flashStatus('Stack some effects first');
+  const name = $('#myFxName').value.trim() || `My effect ${myFx.length + 1}`;
+  myFx.push({ name, stack: JSON.parse(JSON.stringify(stack)) });
+  try { localStorage.setItem(MYFX_KEY, JSON.stringify(myFx)); } catch (e) { /* ignore */ }
+  $('#myFxName').value = '';
+  renderMyFx();
+  flashStatus(`Saved "${name}"`);
+});
+renderMyFx();
+
+// ---------- tabs ----------
+let currentTab = 'edit';
+const TAB_KEYS = [...document.querySelectorAll('#tabs button')].map(b => b.dataset.tab);
+function showTab(name) {
+  currentTab = name;
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('aside .tab').forEach(t => { t.hidden = t.dataset.tab !== name; });
+  view.style.cursor = name === 'images' ? 'move' : '';
+  try { localStorage.setItem('hollowcast.tab', name); } catch (e) { /* ignore */ }
+}
+document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+// ---------- templates ----------
+const sfx = (key, at = 0, extra = {}) => ({ ...HCAudio.newSound(`sfx:${key}:${(Math.random() * 1e6) | 0}:1:0`), name: HCAudio.GENS[key].name, at, ...extra });
+const TEMPLATES = {
+  'Found footage tape': () => [
+    makeScene({ name: 'Warning', src: 'black', dur: 6, trans: 'fade', params: makeParams('Found tape', { titleOn: true, titleType: true, osd: 'none', titleText: 'THE FOLLOWING TAPE WAS FOUND\nIN THE WALL OF A HOUSE\nIN MARROW COUNTY' }), sounds: [sfx('hum', 0, { loop: true, vol: 40 })] }),
+    makeScene({ name: 'Hallway', src: 'black', dur: 14, trans: 'static', script: SCRIPT_EXAMPLES['Hallway background'], chars: [HCChar.create('tall man', { z: 9, anim: 'approach', speed: 0.6 })], params: makeParams('Night shift', { osd: 'PLAY' }), sounds: [sfx('footsteps', 2), sfx('stinger', 12.5)] }),
+    makeScene({ name: 'Cut', src: 'black', dur: 3, trans: 'glitch', params: makeParams('Rotted tape', { osd: 'STOP', titleOn: true, titleText: 'DO NOT REWIND', titleBg: 'black' }), sounds: [sfx('powerdown')] }),
+  ],
+  'Emergency broadcast': () => [
+    makeScene({ name: 'Bars', src: 'testcard', dur: 4, params: makeParams('Found tape', { tone: true, osd: 'none', timecode: false, dateText: '' }) }),
+    makeScene({ name: 'Alert', src: 'black', dur: 14, trans: 'static', params: makeParams('Emergency broadcast', { titleText: 'EMERGENCY ALERT SYSTEM\nCIVIL AUTHORITY WARNING' }), sounds: [sfx('alert', 0, { loop: true, vol: 60 })] }),
+    makeScene({ name: 'Instructions', src: 'black', dur: 12, trans: 'cut', params: makeParams('Emergency broadcast', { titleText: 'DO NOT LOOK OUTSIDE\nDO NOT ANSWER THE DOOR', subRate: 10, subText: 'IT KNOWS' }), sounds: [sfx('drone', 0, { loop: true })] }),
+    makeScene({ name: 'Signal lost', src: 'black', dur: 3, trans: 'roll', params: makeParams('Rotted tape', { osd: 'none', noise: 100 }), sounds: [sfx('static')] }),
+  ],
+  'Surveillance / game ARG': () => [
+    makeScene({ name: 'CAM 01', src: 'screen', dur: 15, trans: 'static', params: makeParams('Surveillance', { camText: 'CAM 01' }), fxStack: [{ id: 'censor-3', amt: 100, on: true }] }),
+    makeScene({ name: 'CAM 02', src: 'screen', dur: 15, trans: 'static', params: makeParams('Surveillance', { camText: 'CAM 02', subRate: 8, subText: 'BEHIND YOU' }), chars: [HCChar.create('faceless', { z: 8, x: 1.5, flicker: 40 })], sounds: [sfx('whisper', 6)] }),
+    makeScene({ name: 'Feed lost', src: 'black', dur: 4, trans: 'glitch', params: makeParams('Surveillance', { titleOn: true, titleText: 'SIGNAL LOST', titleBg: 'black' }), sounds: [sfx('chirps')] }),
+  ],
+  'Creature feature': () => [
+    makeScene({ name: 'Quiet', src: 'black', dur: 8, trans: 'fade', script: SCRIPT_EXAMPLES['Hallway background'], params: makeParams('Night shift'), fxStack: [{ id: 'spot-6', amt: 100, on: true }], sounds: [sfx('wind', 0, { loop: true }), sfx('creak', 5)] }),
+    makeScene({ name: 'It sees you', src: 'black', dur: 6, trans: 'cut', script: SCRIPT_EXAMPLES['Hallway background'], params: makeParams('Rotted tape'), chars: [HCChar.create('monster', { z: 2.2, anim: 'twitch' })], fxStack: [{ id: 'heart-20', amt: 80, on: true }], sounds: [sfx('stinger', 0), sfx('scream', 0.4)] }),
+  ],
+  'Educational tape': () => [
+    makeScene({ name: 'Intro', src: 'black', dur: 6, trans: 'fade', params: makeParams('Found tape', { titleOn: true, titleBg: 'blue', osd: 'none', titleText: 'LESSON 4:\nWHAT TO DO IF THE SUN\nDOES NOT RISE' }), sounds: [sfx('musicbox', 0, { loop: true, vol: 60 })] }),
+    makeScene({ name: 'Diagram', src: 'black', dur: 10, trans: 'cut', script: SCRIPT_EXAMPLES['Spinning cube'], params: makeParams('Found tape', { osd: 'none', crawlOn: true, crawlText: 'REMAIN CALM. COUNT THE PEOPLE IN YOUR HOUSE. COUNT THEM AGAIN.' }), sounds: [sfx('musicbox', 0, { loop: true, vol: 50, rate: 0.8 })] }),
+  ],
+};
+function randomFilm() {
+  const r = a => a[(Math.random() * a.length) | 0];
+  const lines = ['YOU WERE NOT SUPPOSED TO FIND THIS', 'THE HOUSE HAS ONE MORE ROOM THAN BEFORE', 'COUNT YOUR FAMILY', 'DO NOT TRUST THE VOICE ON THE RADIO', 'IT LEARNED YOUR NAME', 'THE NEIGHBORS NEVER LEFT', 'STAY AWAY FROM WINDOWS AFTER 3AM'];
+  const looks = Object.keys(PRESETS).filter(k => k !== 'Clean');
+  const n = 3 + ((Math.random() * 3) | 0), scenes = [];
+  for (let i = 0; i < n; i++) {
+    const look = r(looks), roll = Math.random();
+    const s = makeScene({ name: 'Scene ' + (i + 1), src: r(['black', 'black', 'testcard']), dur: 4 + ((Math.random() * 8) | 0), trans: r(['cut', 'fade', 'static', 'roll', 'glitch']), params: makeParams(look) });
+    if (roll < 0.35) Object.assign(s.params, { titleOn: true, titleType: Math.random() < 0.5, titleText: r(lines), titleBg: r(['black', 'blue']) });
+    else { s.script = SCRIPT_EXAMPLES['Hallway background']; s.chars = [Math.random() < 0.4 ? HCChar.randomMonster() : HCChar.create(r(Object.keys(HCChar.TYPES)), { z: 6, anim: 'approach' })]; }
+    s.fxStack = [{ id: HCFX.LIB[(Math.random() * HCFX.LIB.length) | 0].id, amt: 70, on: true }];
+    s.sounds = [sfx(r(Object.keys(HCAudio.GENS)), 0, { loop: Math.random() < 0.5, vol: 70 })];
+    scenes.push(s);
+  }
+  return scenes;
+}
+TEMPLATES['🎲 Random film'] = randomFilm;
+
+function loadScenes(scenes) {
+  pause();
+  undoStack.push(snapshot());
+  project.scenes = scenes;
+  project.loop = false;
+  sel = 0;
+  lastSnap = snapshot();
+  enterScene(0, 0, true);
+  renderAll();
+  save();
+}
+(() => {
+  const box = $('#mTemplates');
+  for (const [name, fn] of Object.entries(TEMPLATES)) {
+    const b = Object.assign(document.createElement('button'), { className: 'm-btn small', textContent: name });
+    b.addEventListener('click', () => { HCMenu.hide(); loadScenes(fn()); flashStatus(`Template loaded: ${name}`); });
+    box.append(b);
+  }
+})();
+
+// ---------- main menu ----------
+HCMenu.init({
+  continue: () => {},
+  new: () => loadScenes([makeScene({ name: 'Scene', src: 'testcard', dur: 5 })]),
+  open: () => $('#openFile').click(),
+  inspo: () => showTab('inspo'),
+  view: () => view,
+  testcard: () => testcard,
+  audio: () => { initAudio(); return ac; },
+  buildForm,
+  version: '1.2.0',
+});
+$('#menuBtn').addEventListener('click', () => { pause(); HCMenu.show(); });
 
 // ---------- keyboard ----------
 window.addEventListener('keydown', e => {
@@ -1870,6 +2408,8 @@ window.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
   if ((e.ctrlKey || e.metaKey) && k === 'd') { e.preventDefault(); dupScene(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (HCMenu.isOpen()) return;
+  if (/^[1-9]$/.test(k) && TAB_KEYS[+k - 1]) { showTab(TAB_KEYS[+k - 1]); return; }
   if (k === ' ') { e.preventDefault(); togglePlay(); }
   else if (k === 'g') triggerGlitch();
   else if (k === 'f') subFrames = 2;
@@ -1889,6 +2429,7 @@ function renderAll() {
   syncScriptPanel();
   renderChars();
   renderFxStack();
+  renderLayerTabs();
 }
 
 (function boot() {
@@ -1901,6 +2442,11 @@ function renderAll() {
   enterScene(sel, 0, true);
   renderAll();
   lastSnap = snapshot();
+  buildSfxList();
+  let tab = 'edit';
+  try { tab = localStorage.getItem('hollowcast.tab') || 'edit'; } catch (e) { /* ignore */ }
+  showTab(TAB_KEYS.includes(tab) ? tab : 'edit');
+  HCMenu.show();
   if (document.fonts) document.fonts.load('44px VT323').then(() => buildTestcard(true)).catch(() => {});
   requestAnimationFrame(frame);
 })();
