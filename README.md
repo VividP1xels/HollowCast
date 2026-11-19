@@ -93,16 +93,9 @@ The web version needs no build. Open `index.html` through any local web server, 
 
 ### Releasing a new .exe from GitHub
 
-The **Build Windows app** workflow builds the `.exe` on GitHub's Windows machines. To publish a release:
+Every push to `main` runs **Build Windows app** on GitHub's Windows machines and publishes the `.exe` to the Releases page, named after `"version"` in `package.json`. To ship a new version, bump that number (for example to `1.0.1`) and push.
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-The `.exe` files show up on the Releases page a few minutes later. You can also run the workflow by hand from the **Actions** tab.
-
-To turn on the web version: go to **Settings → Pages**, set **Source** to **GitHub Actions**, then rerun **Publish web version**.
+To turn on the web version: go to **Settings → Pages** and set **Source** to **GitHub Actions**. Then open **Actions → Publish web version → Run workflow**.
 
 ## Tips
 

@@ -1,8 +1,8 @@
 name: Publish web version
 
+# Turn on Pages first: Settings → Pages → Source: GitHub Actions.
+# Then run this from the Actions tab.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
