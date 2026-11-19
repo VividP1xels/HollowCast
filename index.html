@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HOLLOWCAST</title>
+<meta name="description" content="An analog horror editor: scene timeline, VHS damage, VFX, 3D, generative scripting, game capture and tape audio, exported to video.">
+<link rel="stylesheet" href="fonts/vt323.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="auth" class="auth" hidden>
+  <form id="authForm" class="auth-card" autocomplete="on">
+    <h1>HOLLOWCAST</h1>
+    <p class="dim" id="authLead">Create an account to start editing.</p>
+    <label>Email<input id="authEmail" type="email" required autocomplete="email"></label>
+    <label>Password<input id="authPass" type="password" required minlength="8" autocomplete="current-password"></label>
+    <label id="authConfirmRow">Confirm password<input id="authConfirm" type="password" minlength="8" autocomplete="new-password"></label>
+    <p id="authErr" class="err" hidden></p>
+    <button type="submit" id="authSubmit">Create account</button>
+    <button type="button" id="authSwitch" class="ghost">I already have an account</button>
+    <p class="fine">Accounts are stored on this device only. No email is sent anywhere.</p>
+  </form>
+</div>
+
+<header>
+  <h1>HOLLOWCAST</h1>
+  <span class="sub">analog horror editor</span>
+  <span id="status" class="status"></span>
+  <nav class="file">
+    <button id="newBtn">New</button>
+    <label class="btn">Open<input type="file" id="openFile" accept=".json,application/json" hidden></label>
+    <button id="saveBtn">Save project</button>
+    <span id="who" class="who"></span>
+    <button id="signOut" class="ghost-sm">Sign out</button>
+  </nav>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="screen" id="drop">
+      <canvas id="view" width="640" height="480"></canvas>
+      <div class="drophint">DROP VIDEO, IMAGES OR .OBJ MODELS</div>
+    </div>
+
+    <div class="transport">
+      <button id="startBtn" title="Go to start (Home)">⏮</button>
+      <button id="playBtn" title="Play / pause (Space)">▶</button>
+      <input type="range" id="seek" min="0" max="1000" value="0" step="0.1" aria-label="Seek through the film">
+      <span id="time">0:00.0 / 0:00.0</span>
+    </div>
+
+    <div class="timeline">
+      <div class="bar">
+        <span class="lbl">SCENES</span>
+        <button id="addScene">+ Scene</button>
+        <button id="dupScene" title="Ctrl+D">Duplicate</button>
+        <button id="splitScene" title="B">Split</button>
+        <button id="delScene">Delete</button>
+        <label class="chk"><input type="checkbox" id="loopChk"> Loop</label>
+      </div>
+      <div id="tl" class="tl"></div>
+    </div>
+
+    <div class="bar media">
+      <span class="lbl">MEDIA</span>
+      <div id="bin" class="bin"></div>
+      <label class="btn">+ Add files<input type="file" id="file" accept="video/*,image/*,.obj" multiple hidden></label>
+    </div>
+
+    <div class="bar actions">
+      <span class="lbl">OUTPUT</span>
+      <button id="exportBtn" class="primary" title="Render the whole film to a video file">Export film</button>
+      <button id="recBtn" class="rec" title="R">● Record live</button>
+      <button id="snapBtn" title="S">Snapshot</button>
+      <button id="glitchBtn" title="G">Glitch</button>
+      <button id="flashBtn" title="F">Subliminal</button>
+    </div>
+
+    <p class="hint"><b>Space</b> play · <b>←/→</b> scenes · <b>B</b> split · <b>Ctrl+Z</b> undo · <b>Ctrl+D</b> duplicate · <b>G</b> glitch · <b>F</b> flash · <b>R</b> record · <b>S</b> snapshot. Everything runs on your computer and nothing is uploaded.</p>
+  </section>
+
+  <aside>
+    <section class="inspector">
+      <div class="ins-title">SCENE <span id="insIdx"></span></div>
+      <label class="row text"><span>Name</span><input id="sName" type="text"></label>
+      <label class="row select"><span>Source</span><select id="sSrc"></select></label>
+      <label class="row text" id="rowDur"><span>Duration (s)</span><input id="sDur" type="number" min="0.5" step="0.5"></label>
+      <div class="row trim" id="rowTrim">
+        <span>Trim (s)</span>
+        <div class="trimbox">
+          <input id="sIn" type="number" step="0.1" min="0" aria-label="In point"> →
+          <input id="sOut" type="number" step="0.1" min="0" aria-label="Out point">
+          <button id="setIn" title="Set in point at playhead">[</button>
+          <button id="setOut" title="Set out point at playhead">]</button>
+        </div>
+      </div>
+      <label class="row select"><span>Transition in</span>
+        <select id="sTrans">
+          <option value="cut">Cut</option>
+          <option value="fade">Fade from black</option>
+          <option value="static">Static burst</option>
+          <option value="roll">Vertical roll</option>
+          <option value="glitch">Hard glitch</option>
+        </select>
+      </label>
+      <label class="row check"><span>Fade out at end</span><input id="sFadeOut" type="checkbox"></label>
+    </section>
+
+    <div class="sect">LOOK <span class="dim">(this scene)</span></div>
+    <div class="presets" id="presets"></div>
+    <div class="row2">
+      <button id="lookAllBtn" class="ghost-sm">Copy look to all scenes</button>
+      <button id="resetSceneBtn" class="ghost-sm">Reset scene look</button>
+    </div>
+
+    <details class="group" open>
+      <summary>SCRIPT / VFX / 3D</summary>
+      <div class="row2">
+        <select id="examples" aria-label="Script examples"><option value="">Examples…</option></select>
+        <button id="insertExample">Load</button>
+        <label class="chk"><input type="checkbox" id="scriptOn" checked> On</label>
+      </div>
+      <textarea id="code" class="code" spellcheck="false" rows="12" placeholder="// JavaScript that runs every frame. Pick an example to start."></textarea>
+      <pre id="scriptErr" class="err" hidden></pre>
+      <details class="api"><summary>Script reference</summary><pre id="scriptHelp"></pre></details>
+    </details>
+
+    <div id="controls"></div>
+  </aside>
+</main>
+
+<dialog id="picker" class="picker">
+  <h2>Choose a game window or screen</h2>
+  <div id="pickerGrid" class="picker-grid"></div>
+  <button id="pickerCancel" class="ghost-sm">Cancel</button>
+</dialog>
+
+<script src="fx.js"></script>
+<script src="app.js"></script>
+<script src="auth.js"></script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "name": "hollowcast",
+  "productName": "HOLLOWCAST",
+  "version": "1.0.0",
+  "description": "An analog horror editor: scene timeline, VHS damage, VFX, 3D, scripting and game capture.",
+  "main": "main.js",
+  "author": "VividP1xels",
+  "license": "MIT",
+  "homepage": "https://github.com/VividP1xels/hollowcast",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "io.github.vividp1xels.hollowcast",
+    "productName": "HOLLOWCAST",
+    "artifactName": "HOLLOWCAST-${version}-${arch}-${target}.${ext}",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "style.css",
+      "app.js",
+      "fx.js",
+      "auth.js",
+      "fonts/**",
+      "build/icon.png"
+    ],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "HOLLOWCAST"
+    },
+    "portable": { "artifactName": "HOLLOWCAST-${version}-portable.exe" },
+    "mac": { "target": "dmg", "category": "public.app-category.video" },
+    "linux": { "target": "AppImage", "category": "AudioVideo" }
+  }
+}

@@ -1,0 +1,8 @@
+/* VT323 by Peter Hull, SIL Open Font License 1.1 (see OFL.txt). Bundled so the app works offline. */
+@font-face {
+  font-family: "VT323";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("vt323-latin-400-normal.woff2") format("woff2");
+}
