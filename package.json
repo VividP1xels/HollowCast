@@ -19,7 +19,6 @@
   "build": {
     "appId": "io.github.vividp1xels.hollowcast",
     "productName": "HOLLOWCAST",
-    "artifactName": "HOLLOWCAST-${version}-${arch}-${target}.${ext}",
     "files": [
       "main.js",
       "preload.js",
@@ -31,18 +30,35 @@
       "fonts/**",
       "build/icon.png"
     ],
-    "directories": { "output": "dist", "buildResources": "build" },
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "HOLLOWCAST"
+      "shortcutName": "HOLLOWCAST",
+      "artifactName": "HOLLOWCAST-${version}-setup.${ext}"
     },
-    "portable": { "artifactName": "HOLLOWCAST-${version}-portable.exe" },
-    "mac": { "target": "dmg", "category": "public.app-category.video" },
-    "linux": { "target": "AppImage", "category": "AudioVideo" }
+    "portable": {
+      "artifactName": "HOLLOWCAST-${version}-portable.exe"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.video",
+      "artifactName": "HOLLOWCAST-${version}.${ext}"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "AudioVideo",
+      "artifactName": "HOLLOWCAST-${version}.${ext}"
+    }
   }
 }
