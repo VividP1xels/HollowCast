@@ -124,7 +124,7 @@ const uid = () => 's' + Date.now().toString(36) + (uidN++).toString(36);
 function makeScene(o = {}) {
   return {
     id: uid(), name: 'Scene', src: 'testcard', inPt: 0, outPt: null, dur: 5,
-    trans: 'cut', fadeOut: false, script: '', scriptOn: true, ...o,
+    trans: 'cut', fadeOut: false, script: '', scriptOn: true, chars: [], fxStack: [], ...o,
     params: { ...DEFAULTS, ...(o.params || {}) },
   };
 }
@@ -144,7 +144,9 @@ function demoScenes() {
     }),
     makeScene({
       name: 'Hallway', src: 'black', dur: 13, trans: 'glitch',
-      script: SCRIPT_EXAMPLES['The figure approaches'],
+      script: SCRIPT_EXAMPLES['Hallway background'],
+      chars: [HCChar.create('smiler', { z: 9, speed: 0.55 })],
+      fxStack: [{ id: 'heart-12', amt: 70, on: true }, { id: 'scratch-6', amt: 100, on: true }],
       params: makeParams('Night shift', { osd: 'REC', camText: 'CAM 02', subRate: 6, zoom: 0 }),
     }),
     makeScene({
@@ -595,6 +597,8 @@ function enterScene(i, t = 0, force) {
     syncControls();
     syncInspector();
     syncScriptPanel();
+    renderChars();
+    renderFxStack();
     renderTimeline();
   }
 }
@@ -1043,6 +1047,11 @@ const api = {
   plane: HC3D.plane, figure: HC3D.figure, box: HC3D.box, merge: HC3D.merge,
   model(name) { const m = media.get(name); return m && m.kind === 'model' ? m.mesh : null; },
   render3d(m, o) { HC3D.render(bctx, m, o); },
+  character(spec = {}) { HCChar.render(bctx, { ...HCChar.create(spec.type || 'human'), ...spec }, api.t); },
+  effect(name, amt = 100) {
+    const e = HCFX.LIB.find(x => x.name.toLowerCase() === String(name).toLowerCase() || x.id === name);
+    if (e) HCFX.apply(bctx, [{ id: e.id, amt, on: true }], api.t, api.T);
+  },
   glitch: () => triggerGlitch(),
   flash: () => { subFrames = 2; },
   burst: (level = 0.4, secs = 0.3) => audioBurst(level, secs),
@@ -1103,6 +1112,10 @@ function frame(now) {
   frameNo++;
   drawSource(r, a);
   runScript(s, t, a, dt);
+  for (const ch of s.chars || []) {
+    try { HCChar.render(bctx, ch, a); } catch (e) { /* skip a broken character */ }
+  }
+  HCFX.apply(bctx, s.fxStack, a, t);
   // Script overrides last one frame: apply them, render, then put the real values back.
   const saved = {};
   for (const k in overrides) { saved[k] = P[k]; P[k] = overrides[k]; }
@@ -1668,6 +1681,187 @@ $('#insertExample').addEventListener('click', () => {
   syncScriptPanel();
 });
 
+// ---------- characters ----------
+let selChar = 0;
+const charTypeEl = $('#charType');
+for (const k of Object.keys(HCChar.TYPES)) charTypeEl.append(new Option(k[0].toUpperCase() + k.slice(1), k));
+
+function renderChars() {
+  const s = cur(), list = $('#charList'), ed = $('#charEditor');
+  if (!s) return;
+  s.chars = s.chars || [];
+  list.innerHTML = '';
+  ed.innerHTML = '';
+  if (selChar >= s.chars.length) selChar = s.chars.length - 1;
+  s.chars.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (i === selChar ? ' active' : '');
+    b.textContent = c.name;
+    b.addEventListener('click', () => { selChar = i; renderChars(); });
+    list.append(b);
+  });
+  $('#charEmpty').hidden = s.chars.length > 0;
+  const c = s.chars[selChar];
+  if (!c) return;
+
+  const top = document.createElement('div');
+  top.className = 'row2';
+  const nameIn = Object.assign(document.createElement('input'), { type: 'text', value: c.name, title: 'Name' });
+  nameIn.style.flex = '1';
+  nameIn.addEventListener('input', () => { c.name = nameIn.value; save(); });
+  nameIn.addEventListener('change', () => { checkpoint(); renderChars(); });
+  const dup = Object.assign(document.createElement('button'), { textContent: 'Copy', className: 'ghost-sm' });
+  dup.addEventListener('click', () => { s.chars.push({ ...JSON.parse(JSON.stringify(c)), id: 'c' + Math.random().toString(36).slice(2, 9), x: c.x + 0.8 }); selChar = s.chars.length - 1; checkpoint(); renderChars(); });
+  const del = Object.assign(document.createElement('button'), { textContent: 'Remove', className: 'ghost-sm' });
+  del.addEventListener('click', () => { s.chars.splice(selChar, 1); checkpoint(); renderChars(); });
+  top.append(nameIn, dup, del);
+  ed.append(top);
+
+  for (const [group, fields] of HCChar.SCHEMA) {
+    const g = document.createElement('div');
+    g.className = 'subhead';
+    g.textContent = group;
+    ed.append(g);
+    for (const [key, label, type, a, b, step] of fields) {
+      const row = document.createElement('label');
+      row.className = 'row ' + (type === 'range' ? 'range' : type === 'check' ? 'check' : 'select');
+      const nm = document.createElement('span'); nm.textContent = label; row.append(nm);
+      let el;
+      if (type === 'range') el = Object.assign(document.createElement('input'), { type: 'range', min: a, max: b, step, value: c[key] });
+      else if (type === 'select') { el = document.createElement('select'); a.forEach(o => el.append(new Option(o, o))); el.value = c[key]; }
+      else if (type === 'check') el = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!c[key] });
+      else el = Object.assign(document.createElement('input'), { type: 'color', value: c[key] });
+      row.append(el);
+      let val;
+      if (type === 'range') { val = document.createElement('span'); val.className = 'val'; val.textContent = c[key]; row.append(val); }
+      el.addEventListener('input', () => {
+        c[key] = type === 'range' ? parseFloat(el.value) : type === 'check' ? el.checked : el.value;
+        if (val) val.textContent = c[key];
+        save();
+      });
+      el.addEventListener('change', checkpoint);
+      ed.append(row);
+    }
+  }
+}
+
+$('#addChar').addEventListener('click', () => {
+  const s = cur();
+  s.chars = s.chars || [];
+  s.chars.push(HCChar.create(charTypeEl.value));
+  selChar = s.chars.length - 1;
+  checkpoint();
+  renderChars();
+});
+$('#randChar').addEventListener('click', () => {
+  const s = cur();
+  s.chars = s.chars || [];
+  s.chars.push(HCChar.randomMonster());
+  selChar = s.chars.length - 1;
+  checkpoint();
+  renderChars();
+});
+
+// ---------- effect library ----------
+const fxSearch = $('#fxSearch'), fxCat = $('#fxCat');
+HCFX.CATS.forEach(c => fxCat.append(new Option(c, c)));
+$('#fxCount').textContent = HCFX.count.toLocaleString();
+
+function addFx(id) {
+  const s = cur();
+  s.fxStack = s.fxStack || [];
+  s.fxStack.push({ id, amt: 100, on: true });
+  checkpoint();
+  renderFxStack();
+}
+
+function renderFxList() {
+  const q = fxSearch.value.trim().toLowerCase(), cat = fxCat.value;
+  const hits = HCFX.LIB.filter(e => (!cat || e.cat === cat) && (!q || e.name.toLowerCase().includes(q) || e.cat.toLowerCase().includes(q)));
+  const list = $('#fxList');
+  list.innerHTML = '';
+  const LIMIT = 150;
+  for (const e of hits.slice(0, LIMIT)) {
+    const b = document.createElement('button');
+    b.className = 'fx-item';
+    b.innerHTML = '<span></span><small></small>';
+    b.firstChild.textContent = e.name;
+    b.lastChild.textContent = e.cat;
+    b.title = 'Add to this scene';
+    b.addEventListener('click', () => addFx(e.id));
+    list.append(b);
+  }
+  $('#fxHits').textContent = hits.length > LIMIT ? `Showing ${LIMIT} of ${hits.length}. Search to narrow it down.` : `${hits.length} effects`;
+}
+
+function renderFxStack() {
+  const s = cur(), box = $('#fxStack');
+  if (!s) return;
+  s.fxStack = s.fxStack || [];
+  box.innerHTML = '';
+  $('#fxStackEmpty').hidden = s.fxStack.length > 0;
+  s.fxStack.forEach((f, i) => {
+    const e = HCFX.BY_ID.get(f.id);
+    const row = document.createElement('div');
+    row.className = 'fx-layer';
+    const on = Object.assign(document.createElement('input'), { type: 'checkbox', checked: f.on !== false, title: 'On / off' });
+    on.addEventListener('change', () => { f.on = on.checked; checkpoint(); });
+    const nm = document.createElement('span');
+    nm.className = 'fx-name';
+    nm.textContent = e ? e.name : f.id;
+    const amt = Object.assign(document.createElement('input'), { type: 'range', min: 0, max: 100, value: f.amt ?? 100, title: 'Amount' });
+    amt.addEventListener('input', () => { f.amt = +amt.value; save(); });
+    amt.addEventListener('change', checkpoint);
+    const upB = Object.assign(document.createElement('button'), { textContent: '↑', className: 'ghost-sm', title: 'Move up' });
+    upB.addEventListener('click', () => { if (i > 0) { s.fxStack.splice(i - 1, 0, s.fxStack.splice(i, 1)[0]); checkpoint(); renderFxStack(); } });
+    const rm = Object.assign(document.createElement('button'), { textContent: '✕', className: 'ghost-sm', title: 'Remove' });
+    rm.addEventListener('click', () => { s.fxStack.splice(i, 1); checkpoint(); renderFxStack(); });
+    row.append(on, nm, amt, upB, rm);
+    box.append(row);
+  });
+}
+
+fxSearch.addEventListener('input', renderFxList);
+fxCat.addEventListener('change', renderFxList);
+$('#fxRandom').addEventListener('click', () => addFx(HCFX.LIB[(Math.random() * HCFX.LIB.length) | 0].id));
+$('#fxChaos').addEventListener('click', () => {
+  for (let i = 0; i < 3; i++) {
+    const s = cur();
+    s.fxStack = s.fxStack || [];
+    s.fxStack.push({ id: HCFX.LIB[(Math.random() * HCFX.LIB.length) | 0].id, amt: 60 + Math.random() * 40 | 0, on: true });
+  }
+  checkpoint();
+  renderFxStack();
+});
+$('#fxClear').addEventListener('click', () => { cur().fxStack = []; checkpoint(); renderFxStack(); });
+renderFxList();
+
+// ---------- inspiration ----------
+const ytSearch = q => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+function renderInspiration() {
+  const grid = $('#inspoGrid');
+  grid.innerHTML = '';
+  for (const w of INSPIRATION) {
+    const card = document.createElement('a');
+    card.className = 'inspo';
+    card.target = '_blank';
+    card.rel = 'noopener';
+    card.href = ytSearch(w.by === 'YouTube' ? 'analog horror' : `${w.name} ${w.by}`);
+    const h = document.createElement('strong'); h.textContent = w.name;
+    const meta = document.createElement('span'); meta.className = 'dim'; meta.textContent = [w.by, w.year].filter(Boolean).join(' · ') + ' · ' + w.tags;
+    const p = document.createElement('p'); p.textContent = w.learn;
+    card.append(h, meta, p);
+    grid.append(card);
+  }
+}
+$('#inspoBtn').addEventListener('click', () => { renderInspiration(); $('#inspo').showModal(); });
+$('#inspoClose').addEventListener('click', () => $('#inspo').close());
+$('#inspoForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const q = $('#inspoQ').value.trim();
+  window.open(ytSearch('analog horror ' + q), '_blank', 'noopener');
+});
+
 // ---------- keyboard ----------
 window.addEventListener('keydown', e => {
   if (e.target.matches('input[type=text], input[type=number], textarea, select')) return;
@@ -1693,6 +1887,8 @@ function renderAll() {
   syncInspector();
   syncControls();
   syncScriptPanel();
+  renderChars();
+  renderFxStack();
 }
 
 (function boot() {

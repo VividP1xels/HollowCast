@@ -32,6 +32,7 @@
     <button id="newBtn">New</button>
     <label class="btn">Open<input type="file" id="openFile" accept=".json,application/json" hidden></label>
     <button id="saveBtn">Save project</button>
+    <button id="inspoBtn" class="primary">Inspiration</button>
     <span id="who" class="who"></span>
     <button id="signOut" class="ghost-sm">Sign out</button>
   </nav>
@@ -116,6 +117,36 @@
     </div>
 
     <details class="group" open>
+      <summary>CHARACTERS <span class="dim">(monsters, people, creatures)</span></summary>
+      <div class="row2">
+        <select id="charType" aria-label="Character type"></select>
+        <button id="addChar">+ Add</button>
+        <button id="randChar" title="Generate a random creature">🎲 Random monster</button>
+      </div>
+      <p id="charEmpty" class="dim small">No characters in this scene yet. Add one, then shape it with the sliders.</p>
+      <div id="charList" class="bin"></div>
+      <div id="charEditor"></div>
+    </details>
+
+    <details class="group" open>
+      <summary>EFFECT LIBRARY <span class="dim">(<span id="fxCount"></span> effects)</span></summary>
+      <div class="subhead">Effects on this scene, applied top to bottom</div>
+      <p id="fxStackEmpty" class="dim small">None yet. Click any effect below to stack it.</p>
+      <div id="fxStack"></div>
+      <div class="row2">
+        <button id="fxRandom">🎲 Random effect</button>
+        <button id="fxChaos">Chaos ×3</button>
+        <button id="fxClear" class="ghost-sm">Clear</button>
+      </div>
+      <div class="row2">
+        <input id="fxSearch" type="text" placeholder="Search: kaleidoscope, blood, drowned…" aria-label="Search effects">
+        <select id="fxCat" aria-label="Category"><option value="">All</option></select>
+      </div>
+      <div id="fxList" class="fx-list"></div>
+      <p id="fxHits" class="dim small"></p>
+    </details>
+
+    <details class="group">
       <summary>SCRIPT / VFX / 3D</summary>
       <div class="row2">
         <select id="examples" aria-label="Script examples"><option value="">Examples…</option></select>
@@ -131,6 +162,21 @@
   </aside>
 </main>
 
+<dialog id="inspo" class="picker">
+  <h2>Analog horror inspiration</h2>
+  <p class="dim">Well-known works and what to learn from each. Each card opens a YouTube search.</p>
+  <form id="inspoForm" class="row2">
+    <input id="inspoQ" type="text" placeholder="Search analog horror: VHS, broadcast, backrooms, puppets…" aria-label="Search analog horror">
+    <button type="submit">Search YouTube</button>
+  </form>
+  <div id="inspoGrid" class="inspo-grid"></div>
+  <p class="row2">
+    <a class="btn" href="https://www.reddit.com/r/analoghorror/" target="_blank" rel="noopener">r/analoghorror</a>
+    <a class="btn" href="https://www.youtube.com/results?search_query=analog+horror+tutorial" target="_blank" rel="noopener">Tutorials</a>
+    <button id="inspoClose" class="ghost-sm">Close</button>
+  </p>
+</dialog>
+
 <dialog id="picker" class="picker">
   <h2>Choose a game window or screen</h2>
   <div id="pickerGrid" class="picker-grid"></div>
@@ -138,6 +184,8 @@
 </dialog>
 
 <script src="fx.js"></script>
+<script src="effects.js"></script>
+<script src="characters.js"></script>
 <script src="app.js"></script>
 <script src="auth.js"></script>
 </body>

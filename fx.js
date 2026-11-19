@@ -245,6 +245,17 @@ render3d(figure(), {
 });
 if (every(3)) { glitch(); burst(0.4, 0.3); }`,
 
+  'Hallway background': `// A dim hallway for characters to stand in.
+ctx.fillStyle = '#3a3f46';
+ctx.fillRect(0, 0, W, H);
+render3d(plane(14), { y: 1, z: 4, scale: [3, 1, 9], wire: true, stroke: '#8a94a0', lineWidth: 2 });`,
+
+  'Monster from code': `// Build a creature in code. Every option from the Characters panel works here.
+character({
+  type: 'monster', z: 3, anim: 'twitch',
+  arms: 6, eyes: 9, eyeColor: '#ffd000', horns: 3, skin: '#2a2a40'
+});`,
+
   'Watching eyes': `// Eyes open in the dark and blink at random.
 ctx.fillStyle = 'rgba(0,0,0,0.9)';
 ctx.fillRect(0, 0, W, H);
@@ -327,6 +338,8 @@ text(str, x, y, {size, color, align})
 image(name)  drawImage(name, x, y, w, h, {alpha})
 cube() sphere() torus() pyramid() plane() figure() box(...) model('x.obj')
 render3d(mesh, {x,y,z, rx,ry,rz, scale, color, wire, stroke, light, fog, cam})
+character({type:'monster', z:3, eyes:6, anim:'twitch', ...})   any creator option
+effect('Drowned Kaleidoscope', 80)   any library effect by name
 glitch()  flash()  burst(level, secs)  every(seconds)
 set('noise', 80)   override any effect for this frame
 after(c => ...)    draw on top after the damage`;

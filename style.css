@@ -251,3 +251,21 @@ dialog.picker::backdrop { background: rgba(0,0,0,.7); }
 .picker .src img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #000; }
 .picker .src span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [hidden] { display: none !important; }
+
+/* ---------- characters, effects, inspiration ---------- */
+.small { font-size: 17px; margin: 4px 0; }
+.subhead { color: var(--dim); letter-spacing: 1px; margin: 8px 0 2px; border-bottom: 1px dashed var(--line); }
+#charList { margin: 6px 0; }
+.row.range { grid-template-columns: 130px 1fr 44px; }
+input[type=color] { width: 100%; height: 26px; background: #000; border: 1px solid var(--line); border-radius: 4px; padding: 0 2px; }
+.fx-list { max-height: 260px; overflow-y: auto; display: grid; gap: 3px; margin-top: 6px; border: 1px solid var(--line); border-radius: 4px; padding: 4px; }
+.fx-item { display: flex; justify-content: space-between; gap: 8px; text-align: left; padding: 2px 8px; }
+.fx-item small { color: var(--dim); }
+.fx-layer { display: grid; grid-template-columns: 20px 1fr 90px auto auto; gap: 6px; align-items: center; margin: 3px 0; }
+.fx-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inspo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; max-height: 58vh; overflow: auto; margin: 10px 0; }
+.inspo { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); text-decoration: none; background: #0b0d0b; }
+.inspo:hover { border-color: var(--accent); }
+.inspo strong { color: var(--accent); font-weight: normal; font-size: 24px; }
+.inspo p { margin: 0; font-size: 18px; line-height: 1.25; }
+a.btn { text-decoration: none; }

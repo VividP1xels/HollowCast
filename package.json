@@ -1,7 +1,7 @@
 {
   "name": "hollowcast",
   "productName": "HOLLOWCAST",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "An analog horror editor: scene timeline, VHS damage, VFX, 3D, scripting and game capture.",
   "main": "main.js",
   "author": "VividP1xels",
@@ -28,7 +28,9 @@
       "fx.js",
       "auth.js",
       "fonts/**",
-      "build/icon.png"
+      "build/icon.png",
+      "effects.js",
+      "characters.js"
     ],
     "directories": {
       "output": "dist",

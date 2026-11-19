@@ -25,7 +25,7 @@ jobs:
       - name: Collect web files
         run: |
           mkdir site
-          cp -r index.html style.css app.js fx.js auth.js fonts site/
+          cp -r index.html style.css app.js fx.js effects.js characters.js auth.js fonts site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
